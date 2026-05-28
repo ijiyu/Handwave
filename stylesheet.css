@@ -1,0 +1,36 @@
+/* GENERAL STYLING*/
+* {
+    font-family: Verdana, Geneva, Tahoma, sans-serif;
+    font-weight: 100;
+}
+#container {
+    position: absolute;
+    left: 0; right: 0; top: 0; bottom: 0;
+    background-color: rgb(88, 208, 255);
+    text-align: center;
+}
+.screen {
+    position: absolute;
+    left: 0; right: 0; top: 0; bottom: 0;
+}
+
+/* GAME STYLING */
+#game-background {
+    position: absolute;
+    left: 0; right: 0; top: 0; bottom: 0;
+    background-color: black;
+    text-align: center;
+}
+#camera-view {
+    transform: scaleX(-1);
+}
+
+/* MAIN MENU STYLING */
+#start-button {
+    width: 250px;
+    height: 80px;
+    border-radius: 15px;
+    font-size: 30px;
+    border-width: 4px;
+    background-color: transparent;
+}

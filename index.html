@@ -1,14 +1,19 @@
 <!DOCTYPE html>
 <html>
-  <style>
-    #container {
-      position: absolute;
-      left: 0; right: 0; top: 0; bottom: 0;
-      background-color: red;
-      text-align: center;
-    }
-  </style>
-  <div id = "container">
-    <h1>Game Coming Soon!!</h1>
-  </div>
+    <head>
+        <title>HandWave Demo - Web Version</title>
+        <link rel="stylesheet" href = "stylesheet.css">
+    </head> 
+    <div id = "container">
+        <div class= "screen" id = "home-screen">
+            <h1 style = "font-weight: bold;">Hand Wave Game</h1>
+            <button id="start-button" onclick="setMenu('game-screen')">Start!</button>
+        </div>
+        <div class = "screen" id = "game-screen">
+            <div id="game-background">
+                <video autoplay="true" id="camera-view" playsinline></video>
+            </div>
+        </div>
+    </div>
+    <script src = "game.js"></script>
 </html>
