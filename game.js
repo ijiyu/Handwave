@@ -2,10 +2,11 @@ import * as THREE from 'three';
 
 import {
     HandLandmarker,
-    FilesetResolver
+    FilesetResolver,
+    GestureRecognizer,
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0";
 
-var activeMenu = "home";
+let activeMenu = "home";
 
 const gameBackgroundElem = document.getElementById("game-background");
 const cameraViewElem = document.getElementById("camera-view");
@@ -22,7 +23,7 @@ gameBackgroundElem.appendChild(outputCanvas);
 
 const ctx = outputCanvas.getContext("2d");
 
-let handLandmarker;
+let gestureRecognizer;
 
 const connections = [
     [0,1],[1,2],[2,3],[3,4],
@@ -34,17 +35,13 @@ const connections = [
 ];
 
 async function setupHandTracking() {
-
-    const vision = await FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
-    );
-
-    handLandmarker = await HandLandmarker.createFromOptions(
+    const vision = await FilesetResolver.forVisionTasks( "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm" );
+    gestureRecognizer = await GestureRecognizer.createFromOptions(
         vision,
         {
             baseOptions: {
                 modelAssetPath:
-                    "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
+                    "https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task"
             },
             runningMode: "VIDEO",
             numHands: 2
@@ -65,10 +62,22 @@ function detectHands() {
     outputCanvas.style.width = rect.width + "px";
     outputCanvas.style.height = rect.height + "px";
 
-    const results = handLandmarker.detectForVideo(
+    const results = gestureRecognizer.recognizeForVideo(
         cameraViewElem,
         performance.now()
     );
+
+    if (results.gestures) {
+        results.gestures.forEach((hand, index) => {
+            if (hand.length > 0) {
+                const g = hand[0];
+
+                console.log(
+                    `Hand ${index}: ${g.categoryName} (${g.score.toFixed(2)})`
+                );
+            }
+        });
+    }
 
     ctx.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
 
@@ -123,9 +132,9 @@ function detectHands() {
     requestAnimationFrame(detectHands);
 }
 function setMenu(toMenu) {
-    var menuScreens = document.getElementsByClassName("screen");
-    for(var menu of menuScreens) {
-        menu.style.visibility = (menu.id != toMenu) ? "hidden" : "visible";
+    const menuScreens = document.getElementsByClassName("screen");
+    for (const menu of menuScreens) {
+        menu.style.visibility = (menu.id !== toMenu) ? "hidden" : "visible";
     }
     activeMenu = toMenu;
 }
