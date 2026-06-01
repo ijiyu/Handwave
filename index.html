@@ -1,28 +1,29 @@
 <!DOCTYPE html>
-<html>
-    <head>
-        <title>HandWave Demo - Web Version</title>
-        <link rel="stylesheet" href = "stylesheet.css">
-        <script type="importmap">
-			{
-				"imports": {
-					"three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js",
-                    "jsm/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/"
-                }
-			}
-		</script>
-    </head> 
-    <div id = "container">
-        <div class= "screen" id = "home-screen">
-            <h1 style = "font-weight: bold;">Hand Wave Game</h1>
-            <button id="start-button">Start!</button>
-        </div>
-        <div class = "screen" id = "game-screen">
-            <div id="game-background">
-                <video autoplay="true" id="camera-view" playsinline></video>
-            </div>
+<html lang="">
+<head>
+    <title>HandWave Demo - Web Version</title>
+    <link rel="stylesheet" href = "stylesheet.css">
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js",
+                "jsm/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<div id = "container">
+    <div class= "screen" id = "home-screen">
+        <h1 style = "font-weight: bold;">Hand Wave Game</h1>
+        <button id="start-button">Start!</button>
+    </div>
+    <div class = "screen" id = "game-screen">
+        <div id="game-background">
+            <video autoplay="true" id="camera-view" playsinline></video>
+            <canvas id="output-canvas"></canvas>
         </div>
     </div>
-    
-    <script type = "module" src = "game.js"></script>
+</div>
+
+<script type = "module" src = "game.js"></script>
 </html>
