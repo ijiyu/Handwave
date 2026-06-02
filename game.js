@@ -6,30 +6,23 @@ import {
     GestureRecognizer,
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0";
 
-//game variables
+let lastHandTime = 0;
+const HAND_INTERVAL = 1000 / 15; // ~66.7ms
+
 var activeMenu = "home";
 var handTrackingActive = false;
 let frames = 0;
 
-//elements
 const container = document.getElementById("container");
 const cameraViewElem = document.getElementById("camera-view");
 const gameScreen = document.getElementById("game-screen");
 
-//functions
 function setMenu(toMenu) {
-    //take all screen elements, hide the unwanted screens and show the screen with id "toMenu"
-    var menuScreens = document.getElementsByClassName("screen");
-    for(var menu of menuScreens) {
-        menu.style.display = (menu.id != toMenu)?"none":"block";
+    const menuScreens = document.getElementsByClassName("screen");
+    for (const menu of menuScreens) {
+        menu.style.display = (menu.id !== toMenu) ? "none" : "block";
     }
     activeMenu = toMenu;
-}
-
-function setBackground(color, time = 0) {
-    //set background color transition time then change color
-    gameBackgroundElem.style.transition = `background-color ${time}s ease`;
-    gameBackgroundElem.style.backgroundColor = color;
 }
 
 function loadCamera() {
@@ -37,9 +30,7 @@ function loadCamera() {
         navigator.mediaDevices.getUserMedia({video:true})
             .then(function (stream) {
                 cameraViewElem.srcObject = stream;
-                cameraViewElem.onloadedmetadata = () => {
-                    setupHandTracking();
-                };
+                cameraViewElem.onloadedmetadata = () => { setupHandTracking(); };
             })
             .catch(function (error) {
                 console.log("Camera access error:", error);
@@ -47,14 +38,9 @@ function loadCamera() {
     }
 }
 
-//code to run on page load
-
-//add interaction events for elements
 document.getElementById("start-button").onclick = () => {setMenu('game-screen')};
 
-//three js type shit
 const scene = new THREE.Scene();
-
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.z = 5;
 
@@ -64,7 +50,6 @@ renderer.domElement.id = "threejs";
 renderer.shadowMap.enabled = true;
 gameScreen.appendChild(renderer.domElement);
 loadCamera();
-
 
 const outputCanvas = document.createElement("canvas");
 outputCanvas.id = "output-canvas";
@@ -77,9 +62,7 @@ outputCanvas.style.zIndex = "10";
 gameScreen.appendChild(outputCanvas);
 
 const ctx = outputCanvas.getContext("2d");
-
 let gestureRecognizer;
-
 const connections = [
     [0,1],[1,2],[2,3],[3,4],
     [0,5],[5,6],[6,7],[7,8],
@@ -104,37 +87,52 @@ async function setupHandTracking() {
     );
     handTrackingActive = true;
 }
+
 function resizeOutputCanvas(){
     let rect = cameraViewElem.getBoundingClientRect();
     outputCanvas.width = rect.width;
     outputCanvas.height = rect.height;
     outputCanvas.style.width = rect.width + "px";
-    outputCanvas.style.height = rect.height + "px";}
+    outputCanvas.style.height = rect.height + "px";
+}
+
 function detectHands() {
+    const now = performance.now();
+
+    // skip if not enough time passed
+    if (now - lastHandTime < HAND_INTERVAL) return;
+
+    lastHandTime = now;
+
+    if (!gestureRecognizer || !cameraViewElem.videoWidth) return;
+
     const results = gestureRecognizer.recognizeForVideo(
         cameraViewElem,
-        performance.now()
+        now
     );
 
-    if(frames % 10 == 0){
+    if (frames % 10 === 0) {
         if (results.gestures) {
             results.gestures.forEach((hand, index) => {
                 if (hand.length > 0) {
                     const g = hand[0];
-                
-                    console.log(
-                        `Hand ${index}: ${g.categoryName} (${g.score.toFixed(2)})`
-                    );
+                    console.log(`Hand ${index}: ${g.categoryName}`);
                 }
             });
         }
     }
+
     frames++;
 
+    drawHands(results);
+}
+
+function drawHands(results) {
     ctx.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
 
     const videoWidth = cameraViewElem.videoWidth;
     const videoHeight = cameraViewElem.videoHeight;
+
     const videoAspect = videoWidth / videoHeight;
     const canvasAspect = outputCanvas.width / outputCanvas.height;
 
@@ -162,11 +160,12 @@ function detectHands() {
     if (results.landmarks) {
         for (const landmarks of results.landmarks) {
             ctx.lineWidth = 3;
+
             for (const [a, b] of connections) {
-                ctx.strokeStyle = "cyan";
-                if(window.curr == a || window.curr == b) ctx.strokeStyle = "red";
                 const p1 = transformPoint(landmarks[a]);
                 const p2 = transformPoint(landmarks[b]);
+
+                ctx.strokeStyle = "cyan";
                 ctx.beginPath();
                 ctx.moveTo(p1.x, p1.y);
                 ctx.lineTo(p2.x, p2.y);
@@ -184,15 +183,9 @@ function detectHands() {
     }
 }
 
-
-// add scene elements
-
-//lighting
-//ambient lighting for all elements to be slightly lit
 const ambient = new THREE.AmbientLight(0xffffff, 0.25);
 scene.add(ambient);
 
-//directional light (mislabeled as spotlight) to emphasize center foreground
 const spotlight = new THREE.DirectionalLight(0xffffff,1.1);
 spotlight.position.set(0,4,1.5);
 spotlight.target.position.set(0,-2,1);
@@ -201,7 +194,6 @@ spotlight.castShadow = true;
 
 scene.add(spotlight);
 scene.add(spotlight.target);
-
 
 //catchers
 const planeGeometry = new THREE.PlaneGeometry();
@@ -226,7 +218,6 @@ ballTest.position.set(1.6, 3, 0.7);
 ballTest.scale.set(0.3,0.3,0.3);
 ballTest.castShadow = true; 
 scene.add(ballTest);
-
 
 //animation loop
 function animate() {
