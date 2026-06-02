@@ -1,27 +1,42 @@
+/* GENERAL STYLING*/
 * {
     font-family: Verdana, Geneva, Tahoma, sans-serif;
     font-weight: 100;
 }
-
 #container {
     position: absolute;
     left: 0; right: 0; top: 0; bottom: 0;
     background-color: rgb(88, 208, 255);
     text-align: center;
 }
-
 .screen {
     position: absolute;
     left: 0; right: 0; top: 0; bottom: 0;
 }
 
+/* GAME STYLING */
 #game-background {
     position: absolute;
     left: 0; right: 0; top: 0; bottom: 0;
     background-color: black;
     text-align: center;
 }
+#camera-view {
+    position: absolute;
+    transform: scaleX(-1);
+    visibility: hidden;
+    left:0;right:0;
+    top:0;bottom:0;
+}
+#game-screen {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top:0;
+    bottom: 0;
+}
 
+/* MAIN MENU STYLING */
 #start-button {
     width: 250px;
     height: 80px;
@@ -29,28 +44,4 @@
     font-size: 30px;
     border-width: 4px;
     background-color: transparent;
-}
-
-#game-background {
-    position: relative;
-    width: 100vw;
-    height: 100vh;
-    overflow: hidden;
-}
-
-#camera-view, #output-canvas {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-}
-
-#camera-view {
-    transform: scaleX(-1);
-    object-fit: cover;
-}
-
-#output-canvas {
-    z-index: 10;
 }
