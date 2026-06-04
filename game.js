@@ -40,6 +40,7 @@ function loadCamera() {
 
 document.getElementById("start-button").onclick = () => {setMenu('game-screen')};
 
+
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.z = 5;
@@ -241,8 +242,26 @@ window.addEventListener('resize', () => { // add threejs canvas size update even
     renderer.setSize(window.innerWidth, window.innerHeight);
     resizeOutputCanvas();
 });
-
+//set level selection
+function setLevelMenu(toLevelMenu) {
+    setMenu(toLevelMenu);
+}
 
 setBackgroundThree(0x000000);
 resizeOutputCanvas();
-setMenu("game-screen");
+setMenu("home-screen");
+document.getElementById("start-button").onclick = () => {
+    setLevelMenu('levels-screen');
+};
+document.getElementById("first-level-button").addEventListener("click",function(){
+    alert("placeholder")
+    setMenu('game-screen');
+})
+document.getElementById("second-level-button").addEventListener("click",function(){
+    alert("placeholder")
+    setMenu('game-screen');
+})
+document.getElementById("third-level-button").addEventListener("click",function(){
+    alert("placeholder")
+    setMenu('game-screen');
+})
