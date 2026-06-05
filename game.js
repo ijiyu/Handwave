@@ -3,7 +3,8 @@ import { detectHands } from './hand-track.js';
 
 export const sharedState = {
     handTrackingActive: false,
-    activeMenu: "home-screen"
+    activeMenu: "home-screen",
+    threejsLoaded: false
 };
 
 let frames = 0;
@@ -31,10 +32,12 @@ const camera = new THREE.OrthographicCamera(-cameraZoom * aspect, cameraZoom * a
 camera.position.z = 5;
 
 const renderer = new THREE.WebGLRenderer();
-    renderer.domElement.id = "threejs";
+renderer.domElement.id = "threejs";
 
 //renderer.shadowMap.enabled = true;
 gameScreen.appendChild(renderer.domElement);
+
+sharedState["threejsLoaded"] = true;
 
 const ambient = new THREE.AmbientLight(0xffffff, 0.25);
 scene.add(ambient);
@@ -122,6 +125,7 @@ export function addBall(posx=0, posy=0, baseScale = 0.5, color = 0xff00ff) {
 }
 
 function resizeCanvas() {
+    // internal resolution stays fixed
     renderer.setSize(1920, 1080, false);
 
     const windowW = window.innerWidth;
@@ -133,11 +137,11 @@ function resizeCanvas() {
     let displayW, displayH;
 
     if (windowAspect > targetAspect) {
-        // window is too wide → height is the limiting factor
+        // window is wider → height limits
         displayH = windowH;
         displayW = displayH * targetAspect;
     } else {
-        // window is too tall → width is the limiting factor
+        // window is taller → width limits
         displayW = windowW;
         displayH = displayW / targetAspect;
     }
@@ -145,13 +149,22 @@ function resizeCanvas() {
     renderer.domElement.style.width = displayW + "px";
     renderer.domElement.style.height = displayH + "px";
 
-    // center it (optional but recommended)
     renderer.domElement.style.position = "absolute";
     renderer.domElement.style.left = "50%";
     renderer.domElement.style.top = "50%";
     renderer.domElement.style.transform = "translate(-50%, -50%)";
 }
+function updateCamera() {
+    const aspect = 1920 / 1080; // FIXED aspect ratio
 
+    camera.left   = -cameraZoom * aspect;
+    camera.right  =  cameraZoom * aspect;
+    camera.top    =  cameraZoom;
+    camera.bottom = -cameraZoom;
+
+    camera.updateProjectionMatrix();
+}
+updateCamera();
 // three js events
 window.addEventListener('resize', () => { // add threejs canvas size update event
     resizeCanvas();
@@ -163,6 +176,7 @@ window.addEventListener('resize', () => { // add threejs canvas size update even
     camera.bottom = -cameraZoom;
 
     camera.updateProjectionMatrix();
+    updateCamera();
 });
 
 resizeCanvas();

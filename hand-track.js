@@ -8,6 +8,7 @@ let lastHandTime = 0;
 const HAND_INTERVAL = 1000 / 120; // ~66.7ms
 
 let currentHand = "None";
+let canvasLoaded = false;
 let playing = false;
 
 const container = document.getElementById("container");
@@ -67,15 +68,26 @@ async function setupHandTracking() {
     sharedState["handTrackingActive"] = true;
 }
 
-function resizeOutputCanvas(){
-    let rect = cameraViewElem.getBoundingClientRect();
-    outputCanvas.width = rect.width;
-    outputCanvas.height = rect.height;
+function resizeOutputCanvas() {
+    const threeCanvas = document.getElementById("threejs");
+    const rect = threeCanvas.getBoundingClientRect();
+
+    // Match CSS size
     outputCanvas.style.width = rect.width + "px";
     outputCanvas.style.height = rect.height + "px";
+
+    // Match internal pixel buffer
+    outputCanvas.width = rect.width;
+    outputCanvas.height = rect.height;
+
+    outputCanvas.style.position = "absolute";
+    outputCanvas.style.left = "50%";
+    outputCanvas.style.top = "50%";
+    outputCanvas.style.transform = "translate(-50%, -50%)";
 }
 
 export function detectHands() {
+    if(!canvasLoaded && sharedState["threejsLoaded"])resizeOutputCanvas();
     const now = performance.now();
 
     // skip if not enough time passed
@@ -179,5 +191,3 @@ function drawHands(results) {
 window.addEventListener('resize', () => { // add handtracking canvas size update event
     resizeOutputCanvas();
 });
-
-resizeOutputCanvas();
