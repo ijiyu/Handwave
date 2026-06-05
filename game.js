@@ -1,18 +1,15 @@
 import * as THREE from 'three';
+import { detectHands } from './hand-track.js';
 
-import {
-    HandLandmarker,
-    FilesetResolver,
-    GestureRecognizer,
-} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0";
+export const sharedState = {
+    handTrackingActive: false,
+    activeMenu: "home-screen"
+};
 
-let lastHandTime = 0;
-const HAND_INTERVAL = 1000 / 15; // ~66.7ms
-
-var activeMenu = "home";
-var handTrackingActive = false;
 let frames = 0;
+let cameraZoom = 5;
 
+const activeBalls = [];
 const container = document.getElementById("container");
 const cameraViewElem = document.getElementById("camera-view");
 const gameScreen = document.getElementById("game-screen");
@@ -22,166 +19,22 @@ function setMenu(toMenu) {
     for (const menu of menuScreens) {
         menu.style.display = (menu.id !== toMenu) ? "none" : "block";
     }
-    activeMenu = toMenu;
+    sharedState["activeMenu"] = toMenu;
 }
 
-function loadCamera() {
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        navigator.mediaDevices.getUserMedia({video:true})
-            .then(function (stream) {
-                cameraViewElem.srcObject = stream;
-                cameraViewElem.onloadedmetadata = () => { setupHandTracking(); };
-            })
-            .catch(function (error) {
-                console.log("Camera access error:", error);
-            });
-    }
-}
 
 document.getElementById("start-button").onclick = () => {setMenu('game-screen')};
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+let aspect = window.innerWidth / window.innerHeight;
+const camera = new THREE.OrthographicCamera(-cameraZoom * aspect, cameraZoom * aspect, cameraZoom, -cameraZoom, 0.1, 10);
 camera.position.z = 5;
 
 const renderer = new THREE.WebGLRenderer();
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.domElement.id = "threejs";
-renderer.shadowMap.enabled = true;
+    renderer.domElement.id = "threejs";
+
+//renderer.shadowMap.enabled = true;
 gameScreen.appendChild(renderer.domElement);
-loadCamera();
-
-const outputCanvas = document.createElement("canvas");
-outputCanvas.id = "output-canvas";
-
-outputCanvas.style.position = "absolute";
-outputCanvas.style.top = "0";
-outputCanvas.style.left = "0";
-outputCanvas.style.zIndex = "10";
-
-gameScreen.appendChild(outputCanvas);
-
-const ctx = outputCanvas.getContext("2d");
-let gestureRecognizer;
-const connections = [
-    [0,1],[1,2],[2,3],[3,4],
-    [0,5],[5,6],[6,7],[7,8],
-    [5,9],[9,10],[10,11],[11,12],
-    [9,13],[13,14],[14,15],[15,16],
-    [13,17],[17,18],[18,19],[19,20],
-    [0,17],[2,5]
-];
-
-async function setupHandTracking() {
-    const vision = await FilesetResolver.forVisionTasks( "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm", { useWebWorker: true });
-    gestureRecognizer = await GestureRecognizer.createFromOptions(
-        vision,
-        {
-            baseOptions: {
-                modelAssetPath:
-                    "https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task"
-            },
-            runningMode: "VIDEO",
-            numHands: 2
-        }
-    );
-    handTrackingActive = true;
-}
-
-function resizeOutputCanvas(){
-    let rect = cameraViewElem.getBoundingClientRect();
-    outputCanvas.width = rect.width;
-    outputCanvas.height = rect.height;
-    outputCanvas.style.width = rect.width + "px";
-    outputCanvas.style.height = rect.height + "px";
-}
-
-function detectHands() {
-    const now = performance.now();
-
-    // skip if not enough time passed
-    if (now - lastHandTime < HAND_INTERVAL) return;
-
-    lastHandTime = now;
-
-    if (!gestureRecognizer || !cameraViewElem.videoWidth) return;
-
-    const results = gestureRecognizer.recognizeForVideo(
-        cameraViewElem,
-        now
-    );
-
-    if (frames % 10 === 0) {
-        if (results.gestures) {
-            results.gestures.forEach((hand, index) => {
-                if (hand.length > 0) {
-                    const g = hand[0];
-                    console.log(`Hand ${index}: ${g.categoryName}`);
-                }
-            });
-        }
-    }
-
-    frames++;
-
-    drawHands(results);
-}
-
-function drawHands(results) {
-    ctx.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
-
-    const videoWidth = cameraViewElem.videoWidth;
-    const videoHeight = cameraViewElem.videoHeight;
-
-    const videoAspect = videoWidth / videoHeight;
-    const canvasAspect = outputCanvas.width / outputCanvas.height;
-
-    let scale;
-    let xOffset = 0;
-    let yOffset = 0;
-
-    if (videoAspect > canvasAspect) {
-        scale = outputCanvas.height / videoHeight;
-        const scaledWidth = videoWidth * scale;
-        xOffset = (scaledWidth - outputCanvas.width) / 2;
-    } else {
-        scale = outputCanvas.width / videoWidth;
-        const scaledHeight = videoHeight * scale;
-        yOffset = (scaledHeight - outputCanvas.height) / 2;
-    }
-
-    function transformPoint(point) {
-        return {
-            x: outputCanvas.width - (point.x * videoWidth * scale - xOffset),
-            y: point.y * videoHeight * scale - yOffset
-        };
-    }
-
-    if (results.landmarks) {
-        for (const landmarks of results.landmarks) {
-            ctx.lineWidth = 3;
-
-            for (const [a, b] of connections) {
-                const p1 = transformPoint(landmarks[a]);
-                const p2 = transformPoint(landmarks[b]);
-
-                ctx.strokeStyle = "cyan";
-                ctx.beginPath();
-                ctx.moveTo(p1.x, p1.y);
-                ctx.lineTo(p2.x, p2.y);
-                ctx.stroke();
-            }
-
-            for (const point of landmarks) {
-                const p = transformPoint(point);
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
-                ctx.fillStyle = "cyan";
-                ctx.fill();
-            }
-        }
-    }
-}
 
 const ambient = new THREE.AmbientLight(0xffffff, 0.25);
 scene.add(ambient);
@@ -195,6 +48,11 @@ spotlight.castShadow = true;
 scene.add(spotlight);
 scene.add(spotlight.target);
 
+const gridHelper = new THREE.GridHelper(20,6,0xffc847,0xffc847);
+gridHelper.rotation.set(1.57,0,0);
+scene.add(gridHelper);
+
+/*
 //catchers
 const planeGeometry = new THREE.PlaneGeometry();
 const leftCatch = new THREE.Mesh(planeGeometry,  new THREE.MeshStandardMaterial({color: 0x0000ff,side: THREE.DoubleSide}));
@@ -210,39 +68,104 @@ rightCatch.position.set(1.6,-2.5,0.7);
 rightCatch.scale.set(2,2);
 rightCatch.receiveShadow = true;
 scene.add(rightCatch);
+*/
 
 //balltest
 const ballGeometry = new THREE.SphereGeometry();
-const ballTest = new THREE.Mesh(ballGeometry, new THREE.MeshStandardMaterial({color:0xff00ff}));
-ballTest.position.set(1.6, 3, 0.7);
-ballTest.scale.set(0.3,0.3,0.3);
-ballTest.castShadow = true; 
-scene.add(ballTest);
+
 
 //animation loop
 function animate() {
-    if (handTrackingActive) {
+    if (sharedState["handTrackingActive"]) {
         detectHands();
     }
-    ballTest.position.y -= 0.03;
+    for(let i = 0; i < activeBalls.length; i++) {
+        let ball = activeBalls[i];
+        let ballObj = ball["object"];
+        ballObj.position.z += 0.04;
+        ballObj.material.opacity= Math.min(ballObj.material.opacity+0.003, 1);
+        updateObjectScale(ballObj);
+        if(ballObj.position.z > 4){
+            scene.remove(ballObj);
+            activeBalls.splice(i,1);
+        }
+    }
+    //gridHelper.translateZ(0.02*Math.sin(frames/60));
+    //gridHelper.translateX(0.03*Math.sin(frames/60));
+    //activeBalls[0]["object"].translateY(0.03*Math.sin(frames/60));
     renderer.render(scene, camera);
+    frames++;
 }
+
+
 renderer.setAnimationLoop(animate);
 
+
+
 //three js functions
-function setBackgroundThree(color) {
+function updateObjectScale(obj) {
+    const baseScale = 0.35;
+    const depthScale = (1 + obj.position.z * 0.5); 
+    obj.scale.setScalar(baseScale * depthScale);
+}
+
+function setBackgroundThree(color) { //set background color; color should be formatted as a hexadecimal literal, e.g. 0xCAFFEE
     scene.background = new THREE.Color(color);
+}
+
+export function addBall(posx=0, posy=0, baseScale = 0.5, color = 0xff00ff) {
+    const ball = new THREE.Mesh(ballGeometry, new THREE.MeshStandardMaterial({color:color, transparent:true,opacity:0.4}));
+    ball.position.set(posx, posy, 0);
+    ball.scale.set(0.3,0.3,0.3);
+    scene.add(ball);
+    activeBalls.push({posx:posx,posy:posy,baseScale:baseScale,color:color,object:ball});
+}
+
+function resizeCanvas() {
+    renderer.setSize(1920, 1080, false);
+
+    const windowW = window.innerWidth;
+    const windowH = window.innerHeight;
+
+    const targetAspect = 16 / 9;
+    const windowAspect = windowW / windowH;
+
+    let displayW, displayH;
+
+    if (windowAspect > targetAspect) {
+        // window is too wide → height is the limiting factor
+        displayH = windowH;
+        displayW = displayH * targetAspect;
+    } else {
+        // window is too tall → width is the limiting factor
+        displayW = windowW;
+        displayH = displayW / targetAspect;
+    }
+
+    renderer.domElement.style.width = displayW + "px";
+    renderer.domElement.style.height = displayH + "px";
+
+    // center it (optional but recommended)
+    renderer.domElement.style.position = "absolute";
+    renderer.domElement.style.left = "50%";
+    renderer.domElement.style.top = "50%";
+    renderer.domElement.style.transform = "translate(-50%, -50%)";
 }
 
 // three js events
 window.addEventListener('resize', () => { // add threejs canvas size update event
-    camera.aspect = window.innerWidth / window.innerHeight;
+    resizeCanvas();
+    const aspect = window.innerWidth / window.innerHeight;
+
+    camera.left   = -cameraZoom * aspect;
+    camera.right  =  cameraZoom * aspect;
+    camera.top    =  cameraZoom;
+    camera.bottom = -cameraZoom;
+
     camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    resizeOutputCanvas();
 });
 
+resizeCanvas();
 
 setBackgroundThree(0x000000);
-resizeOutputCanvas();
 setMenu("game-screen");
