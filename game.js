@@ -10,6 +10,8 @@ export const sharedState = {
 let frames = 0;
 let cameraZoom = 5;
 
+let rightColor = 0xFF0000;
+let leftColor = 0x0000FF;
 const activeBalls = [];
 const container = document.getElementById("container");
 const cameraViewElem = document.getElementById("camera-view");
@@ -55,26 +57,8 @@ const gridHelper = new THREE.GridHelper(20,6,0xffc847,0xffc847);
 gridHelper.rotation.set(1.57,0,0);
 scene.add(gridHelper);
 
-/*
-//catchers
-const planeGeometry = new THREE.PlaneGeometry();
-const leftCatch = new THREE.Mesh(planeGeometry,  new THREE.MeshStandardMaterial({color: 0x0000ff,side: THREE.DoubleSide}));
-leftCatch.rotation.x = 1.3;
-leftCatch.position.set(-1.6,-2.5,0.7);
-leftCatch.scale.set(2,2);
-leftCatch.receiveShadow = true;
-scene.add(leftCatch);
-
-const rightCatch = new THREE.Mesh(planeGeometry,  new THREE.MeshStandardMaterial({color: 0xff0000,side: THREE.DoubleSide}));
-rightCatch.rotation.x = 1.3;
-rightCatch.position.set(1.6,-2.5,0.7);
-rightCatch.scale.set(2,2);
-rightCatch.receiveShadow = true;
-scene.add(rightCatch);
-*/
-
 //balltest
-const ballGeometry = new THREE.SphereGeometry();
+const ballGeometry = new THREE.CircleGeometry();
 
 
 //animation loop
@@ -86,10 +70,11 @@ function animate() {
         let ball = activeBalls[i];
         let ballObj = ball["object"];
         ballObj.position.z += 0.04;
-        ballObj.material.opacity= Math.min(ballObj.material.opacity+0.003, 1);
+        ballObj.material.opacity= Math.min(ballObj.material.opacity+0.004, 1);
         updateObjectScale(ballObj);
         if(ballObj.position.z > 4){
             scene.remove(ballObj);
+            scene.remove(ball["ring"]);
             activeBalls.splice(i,1);
         }
     }
@@ -116,12 +101,19 @@ function setBackgroundThree(color) { //set background color; color should be for
     scene.background = new THREE.Color(color);
 }
 
-export function addBall(posx=0, posy=0, baseScale = 0.5, color = 0xff00ff) {
-    const ball = new THREE.Mesh(ballGeometry, new THREE.MeshStandardMaterial({color:color, transparent:true,opacity:0.4}));
+export function addBall(posx=0, posy=0, baseScale = 0.5, hand=0, color = -1) {
+    console.log(hand);
+    const objColor = color==-1?(hand==0?0xff00ff:hand==1?rightColor:leftColor):color;
+    const ball = new THREE.Mesh(ballGeometry, new THREE.MeshStandardMaterial({color:objColor, transparent:true,opacity:0.4}));
     ball.position.set(posx, posy, 0);
     ball.scale.set(0.3,0.3,0.3);
     scene.add(ball);
-    activeBalls.push({posx:posx,posy:posy,baseScale:baseScale,color:color,object:ball});
+
+    const ring = new THREE.Mesh(new THREE.RingGeometry(1,1.1), new THREE.MeshStandardMaterial({color:objColor, transparent:true,opacity:0.4}));
+    ring.position.set(posx, posy, 0);
+    ball.scale.set(2,2,2);
+    scene.add(ring);
+    activeBalls.push({posx:posx,posy:posy,baseScale:baseScale,color:color,object:ball,hand:hand, ring:ring});
 }
 
 function resizeCanvas() {
@@ -181,5 +173,5 @@ window.addEventListener('resize', () => { // add threejs canvas size update even
 
 resizeCanvas();
 
-setBackgroundThree(0x000000);
+setBackgroundThree(0xFFFFFF);
 setMenu("game-screen");

@@ -10,6 +10,8 @@ const HAND_INTERVAL = 1000 / 120; // ~66.7ms
 let currentHand = "None";
 let canvasLoaded = false;
 let playing = false;
+let rightHand = {x:0,y:0};
+let handedness;
 
 const container = document.getElementById("container");
 const cameraViewElem = document.getElementById("camera-view");
@@ -62,7 +64,8 @@ async function setupHandTracking() {
                 delegate: "GPU"
             },
             runningMode: "VIDEO",
-            numHands: 2
+            numHands: 2,
+            handedness: true
         }
     );
     sharedState["handTrackingActive"] = true;
@@ -101,8 +104,7 @@ export function detectHands() {
         cameraViewElem,
         now
     );
-
-    //if (frames % 10 === 0) {
+ //if (frames % 10 === 0) {
         if (results.gestures) {
             results.gestures.forEach((hand, index) => {
                 if (hand.length > 0) {
@@ -113,7 +115,15 @@ export function detectHands() {
             });
         }
     //}
-    
+    const handednesses = results.handednesses;
+handedness = [];
+
+    if (handednesses && handednesses.length > 0) {
+    handednesses.forEach((handData, index) => {
+        handedness[handedness.length] = handData[0].categoryName;
+    });
+}
+
     if(currentHand=="Closed_Fist"&&playing){
         document.getElementById("coolio").pause();
         playing=false;
@@ -158,7 +168,9 @@ function drawHands(results) {
     }
 
     if (results.landmarks) {
-        for (const landmarks of results.landmarks) {
+        for (let i = 0; i < results.landmarks.length; i++) {
+            let landmarks = results.landmarks[i];
+            let handSide = handedness[i];
             ctx.lineWidth = 3;
 
             //draw lines between hand points
@@ -166,7 +178,8 @@ function drawHands(results) {
                 const p1 = transformPoint(landmarks[a]);
                 const p2 = transformPoint(landmarks[b]);
 
-                ctx.strokeStyle = "cyan";
+                if(handSide == "Right") ctx.strokeStyle = "cyan";
+                else ctx.strokeStyle = "red";
                 ctx.beginPath();
                 ctx.moveTo(p1.x, p1.y);
                 ctx.lineTo(p2.x, p2.y);
