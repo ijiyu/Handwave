@@ -16,7 +16,6 @@ const gameScreen = document.getElementById("game-screen");
 
 let gestureRecognizer = null;
 
-// ---------------- CAMERA ----------------
 function loadCamera() {
     navigator.mediaDevices.getUserMedia({ video: true })
         .then(stream => {
