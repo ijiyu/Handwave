@@ -5,11 +5,14 @@ import {
 
 export const handState = {
     gesture: "None",
-    handedness: []
+    handedness: [],
+    landmarks: []
 };
 
 let lastHandTime = 0;
 const HAND_INTERVAL = 1000 / 30;
+export let latestResults = null;
+export let videoSize = { width: 0, height: 0 };
 
 const cameraViewElem = document.getElementById("camera-view");
 const gameScreen = document.getElementById("game-screen");
@@ -27,13 +30,11 @@ function loadCamera() {
 
 loadCamera();
 
-// ---------------- INIT MODEL ----------------
 async function setupHandTracking() {
     const vision = await FilesetResolver.forVisionTasks(
         "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm",
         { useWebWorker: true }
     );
-
     gestureRecognizer = await GestureRecognizer.createFromOptions(vision, {
         baseOptions: {
             modelAssetPath:
@@ -45,7 +46,6 @@ async function setupHandTracking() {
     });
 }
 
-// ---------------- MAIN DETECTION ----------------
 export function detectHands() {
     if (!gestureRecognizer || !cameraViewElem.videoWidth) return;
 
@@ -55,11 +55,18 @@ export function detectHands() {
 
     const results = gestureRecognizer.recognizeForVideo(cameraViewElem, now);
 
-    // gestures
+    latestResults = results; // <-- store full frame output
+
     if (results.gestures?.length) {
         handState.gesture = results.gestures[0][0].categoryName;
     }
 
-    // handedness
-    handState.handedness = (results.handednesses || []).map(h => h[0].categoryName);
+    handState.handedness =
+        (results.handednesses || []).map(h => h[0].categoryName);
+
+    handState.landmarks = results.landmarks || [];
+    videoSize.width = cameraViewElem.videoWidth;
+    videoSize.height = cameraViewElem.videoHeight;
+
+    latestResults = results;
 }
