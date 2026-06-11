@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HandBeat</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0a0a0f;
+    color: #fff;
+    font-family: 'Segoe UI', sans-serif;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  #gameCanvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  #webcam {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    opacity: 0.18;
+    transform: scaleX(-1);
+  }
+
+  #landmarkCanvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 9;
+    transform: scaleX(-1);
+    pointer-events: none;
+  }
+
+  #ui {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 20;
+    pointer-events: none;
+  }
+
+  #score-display {
+    position: absolute;
+    top: 24px; right: 32px;
+    text-align: right;
+  }
+
+  #score-display .score-num {
+    font-size: 48px;
+    font-weight: 700;
+    letter-spacing: -2px;
+    color: #fff;
+    line-height: 1;
+  }
+
+  #score-display .score-label {
+    font-size: 12px;
+    letter-spacing: 3px;
+    color: rgba(255,255,255,0.4);
+    text-transform: uppercase;
+  }
+
+  #combo-display {
+    position: absolute;
+    top: 24px; left: 32px;
+    font-size: 14px;
+    color: rgba(255,255,255,0.5);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  #combo-display .combo-num {
+    font-size: 36px;
+    font-weight: 700;
+    color: #fff;
+    display: block;
+    line-height: 1;
+  }
+
+  #accuracy-bar {
+    position: absolute;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 300px;
+    text-align: center;
+  }
+
+  #accuracy-bar .bar-track {
+    height: 4px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 6px;
+  }
+
+  #accuracy-bar .bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #f05, #f80);
+    border-radius: 2px;
+    transition: width 0.3s ease;
+    width: 100%;
+  }
+
+  #accuracy-bar .acc-label {
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: rgba(255,255,255,0.35);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  #accuracy-bar .acc-val {
+    font-size: 20px;
+    font-weight: 600;
+  }
+
+  #gesture-indicator {
+    position: absolute;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 20px;
+    align-items: center;
+  }
+
+  .gest-icon {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.15);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px;
+    background: rgba(255,255,255,0.04);
+    transition: all 0.15s ease;
+  }
+
+  .gest-icon.active-fist {
+    border-color: #f05;
+    background: rgba(255,0,85,0.18);
+    box-shadow: 0 0 20px rgba(255,0,85,0.4);
+  }
+
+  .gest-icon.active-open {
+    border-color: #0af;
+    background: rgba(0,170,255,0.18);
+    box-shadow: 0 0 20px rgba(0,170,255,0.4);
+  }
+
+  #start-screen {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(10,10,15,0.92);
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+  }
+
+  #start-screen h1 {
+    font-size: 72px;
+    font-weight: 800;
+    letter-spacing: -4px;
+    background: linear-gradient(135deg, #f05, #f80, #0af);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  #start-screen p {
+    color: rgba(255,255,255,0.5);
+    font-size: 15px;
+    text-align: center;
+    max-width: 420px;
+    line-height: 1.7;
+  }
+
+  .legend {
+    display: flex;
+    gap: 32px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 16px 28px;
+    margin-top: 8px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+  }
+
+  .legend-dot {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .dot-red { background: #f05; }
+  .dot-blue { background: #0af; }
+
+  #start-btn {
+    margin-top: 8px;
+    padding: 14px 48px;
+    background: linear-gradient(135deg, #f05, #f80);
+    border: none;
+    border-radius: 40px;
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    cursor: pointer;
+    pointer-events: all;
+    transition: transform 0.15s, opacity 0.15s;
+  }
+
+  #start-btn:hover { transform: scale(1.04); opacity: 0.92; }
+  #start-btn:active { transform: scale(0.97); }
+
+  #status-msg {
+    font-size: 13px;
+    color: rgba(255,255,255,0.3);
+    letter-spacing: 1px;
+  }
+
+  #game-over {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(10,10,15,0.92);
+    z-index: 50;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+  }
+
+  #game-over h2 {
+    font-size: 52px;
+    font-weight: 800;
+    letter-spacing: -2px;
+  }
+
+  #game-over .final-score {
+    font-size: 80px;
+    font-weight: 700;
+    letter-spacing: -4px;
+    color: #f80;
+  }
+
+  #game-over .stats {
+    display: flex;
+    gap: 40px;
+    color: rgba(255,255,255,0.5);
+    font-size: 14px;
+    letter-spacing: 1px;
+  }
+
+  #game-over .stats span b {
+    color: #fff;
+    display: block;
+    font-size: 22px;
+    font-weight: 600;
+  }
+
+  #retry-btn {
+    margin-top: 16px;
+    padding: 12px 40px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 40px;
+    color: #fff;
+    font-size: 15px;
+    cursor: pointer;
+    pointer-events: all;
+    transition: background 0.2s;
+  }
+
+  #retry-btn:hover { background: rgba(255,255,255,0.14); }
+
+  #loading-msg {
+    position: absolute;
+    bottom: 140px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 12px;
+    color: rgba(255,255,255,0.25);
+    letter-spacing: 2px;
+    z-index: 60;
+  }
+
+  #hp-bar {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 5px;
+    background: rgba(255,255,255,0.06);
+    z-index: 21;
+  }
+
+  #hp-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #f05, #f80);
+    transition: width 0.4s ease;
+    width: 100%;
+  }
+</style>
+</head>
+<body>
+
+<video id="webcam" autoplay muted playsinline></video>
+<canvas id="landmarkCanvas"></canvas>
+<canvas id="gameCanvas"></canvas>
+
+<div id="hp-bar"><div id="hp-fill"></div></div>
+
+<div id="ui">
+  <div id="score-display">
+    <div class="score-label">Score</div>
+    <div class="score-num" id="score-val">0</div>
+  </div>
+  <div id="combo-display">
+    <span class="combo-num" id="combo-val">0</span>
+    combo
+  </div>
+  <div id="accuracy-bar">
+    <div class="acc-label">Accuracy</div>
+    <div class="acc-val" id="acc-val">100%</div>
+    <div class="bar-track"><div class="bar-fill" id="acc-fill"></div></div>
+  </div>
+  <div id="gesture-indicator">
+    <div class="gest-icon" id="icon-fist" title="Fist">✊</div>
+    <div style="font-size:12px;color:rgba(255,255,255,0.3);letter-spacing:2px;">GESTURE</div>
+    <div class="gest-icon" id="icon-open" title="Open">🖐</div>
+  </div>
+</div>
+
+<div id="start-screen">
+  <h1>HandBeat</h1>
+  <p>Move your hand over notes as they appear.<br>Make a <b style="-webkit-text-fill-color:#f05;background:none">fist ✊</b> for red notes · <b style="-webkit-text-fill-color:#0af;background:none">open palm 🖐</b> for blue notes.</p>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot dot-red"></div>Red circle → Fist</div>
+    <div class="legend-item"><div class="legend-dot dot-blue"></div>Blue circle → Open palm</div>
+  </div>
+  <button id="start-btn">Allow Camera & Play</button>
+  <div id="status-msg">Camera access required</div>
+</div>
+
+<div id="game-over">
+  <h2>Round Over</h2>
+  <div class="final-score" id="final-score">0</div>
+  <div class="stats">
+    <span><b id="final-hits">0</b>hits</span>
+    <span><b id="final-misses">0</b>misses</span>
+    <span><b id="final-acc">0%</b>accuracy</span>
+    <span><b id="final-combo">0</b>best combo</span>
+  </div>
+  <button id="retry-btn">Play Again</button>
+</div>
+
+<div id="loading-msg">Loading MediaPipe…</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+<script>
+const gameCanvas = document.getElementById('gameCanvas');
+const ctx = gameCanvas.getContext('2d');
+const lmCanvas = document.getElementById('landmarkCanvas');
+const lmCtx = lmCanvas.getContext('2d');
+
+function resize() {
+  gameCanvas.width = lmCanvas.width = window.innerWidth;
+  gameCanvas.height = lmCanvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ── Game state ──────────────────────────────────────────
+let score = 0, combo = 0, maxCombo = 0, hits = 0, misses = 0, totalNotes = 0;
+let hp = 100;
+let gameActive = false;
+let notes = [];
+let particles = [];
+let feedbacks = [];
+let noteId = 0;
+let spawnInterval = null;
+let difficulty = 1;
+let diffTimer = 0;
+
+// ── Hand state ──────────────────────────────────────────
+let handPos = null;      // {x, y} in canvas coords (0..1 * dims), mirrored
+let gestureState = 'none'; // 'fist' | 'open' | 'none'
+let prevGesture = 'none';
+let gestureConfidence = 0;
+
+// ── MediaPipe ───────────────────────────────────────────
+const hands = new Hands({
+  locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+});
+
+hands.setOptions({
+  maxNumHands: 1,
+  modelComplexity: 1,
+  minDetectionConfidence: 0.6,
+  minTrackingConfidence: 0.5
+});
+
+hands.onResults(onHandResults);
+
+function onHandResults(results) {
+  lmCtx.clearRect(0, 0, lmCanvas.width, lmCanvas.height);
+
+  if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+    handPos = null;
+    gestureState = 'none';
+    updateGestureUI('none');
+    return;
+  }
+
+  const lms = results.multiHandLandmarks[0];
+
+  // Mirror x because video is mirrored
+  const palm = lms[9];
+  handPos = {
+    x: (1 - palm.x) * lmCanvas.width,
+    y: palm.y * lmCanvas.height
+  };
+
+  // Draw hand skeleton
+  drawHandSkeleton(lms);
+
+  // Detect gesture
+  const newGesture = detectGesture(lms);
+  if (newGesture === gestureState) {
+    gestureConfidence = Math.min(gestureConfidence + 1, 3);
+  } else {
+    gestureConfidence = 0;
+    gestureState = newGesture;
+  }
+  updateGestureUI(gestureState);
+}
+
+function detectGesture(lms) {
+  // Check finger curl: compare tip to PIP joint distance from wrist
+  // Fingers: index=8/6, middle=12/10, ring=16/14, pinky=20/18, thumb=4/3
+  const wrist = lms[0];
+
+  function dist(a, b) {
+    return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+  }
+
+  function fingerExtended(tipIdx, pipIdx) {
+    return dist(lms[tipIdx], wrist) > dist(lms[pipIdx], wrist) * 1.1;
+  }
+
+  const index  = fingerExtended(8,  6);
+  const middle = fingerExtended(12, 10);
+  const ring   = fingerExtended(16, 14);
+  const pinky  = fingerExtended(20, 18);
+
+  const extended = [index, middle, ring, pinky].filter(Boolean).length;
+
+  if (extended >= 3) return 'open';
+  if (extended <= 1) return 'fist';
+  return 'none';
+}
+
+function drawHandSkeleton(lms) {
+  const W = lmCanvas.width, H = lmCanvas.height;
+  const connections = [
+    [0,1],[1,2],[2,3],[3,4],
+    [0,5],[5,6],[6,7],[7,8],
+    [5,9],[9,10],[10,11],[11,12],
+    [9,13],[13,14],[14,15],[15,16],
+    [13,17],[17,18],[18,19],[19,20],
+    [0,17]
+  ];
+
+  const color = gestureState === 'fist' ? 'rgba(255,0,85,0.7)' :
+                gestureState === 'open' ? 'rgba(0,170,255,0.7)' :
+                'rgba(255,255,255,0.35)';
+
+  lmCtx.strokeStyle = color;
+  lmCtx.lineWidth = 2;
+  for (const [a, b] of connections) {
+    const ax = (1 - lms[a].x) * W, ay = lms[a].y * H;
+    const bx = (1 - lms[b].x) * W, by = lms[b].y * H;
+    lmCtx.beginPath();
+    lmCtx.moveTo(ax, ay);
+    lmCtx.lineTo(bx, by);
+    lmCtx.stroke();
+  }
+
+  for (let i = 0; i < lms.length; i++) {
+    const x = (1 - lms[i].x) * W, y = lms[i].y * H;
+    lmCtx.beginPath();
+    lmCtx.arc(x, y, i === 0 ? 5 : 3, 0, Math.PI * 2);
+    lmCtx.fillStyle = color;
+    lmCtx.fill();
+  }
+}
+
+function updateGestureUI(g) {
+  const fi = document.getElementById('icon-fist');
+  const oi = document.getElementById('icon-open');
+  fi.className = 'gest-icon' + (g === 'fist' ? ' active-fist' : '');
+  oi.className = 'gest-icon' + (g === 'open' ? ' active-open' : '');
+}
+
+// ── Note types ──────────────────────────────────────────
+const NOTE_RADIUS = 48;
+const HIT_RADIUS = 60;
+const NOTE_LIFETIME = 2200; // ms
+
+function spawnNote() {
+  if (!gameActive) return;
+  const type = Math.random() < 0.5 ? 'fist' : 'open';
+  const margin = NOTE_RADIUS + 20;
+  const x = margin + Math.random() * (gameCanvas.width  - margin * 2);
+  const y = margin + Math.random() * (gameCanvas.height - margin * 2);
+  const lifetime = Math.max(1100, NOTE_LIFETIME - difficulty * 80);
+
+  notes.push({
+    id: noteId++,
+    type,
+    x, y,
+    born: performance.now(),
+    lifetime,
+    hit: false,
+    missed: false,
+    scale: 0
+  });
+  totalNotes++;
+}
+
+// ── Particles ────────────────────────────────────────────
+function spawnParticles(x, y, color) {
+  for (let i = 0; i < 14; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 2 + Math.random() * 5;
+    particles.push({
+      x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      alpha: 1,
+      r: 3 + Math.random() * 4,
+      color,
+      life: 0
+    });
+  }
+}
+
+function spawnFeedback(x, y, text, color) {
+  feedbacks.push({ x, y, text, color, life: 0, vy: -1.2 });
+}
+
+// ── Game loop ────────────────────────────────────────────
+let lastTime = 0;
+
+function gameLoop(ts) {
+  const dt = ts - lastTime;
+  lastTime = ts;
+
+  ctx.clearRect(0, 0, gameCanvas.width, gameCanvas.height);
+
+  if (!gameActive) {
+    requestAnimationFrame(gameLoop);
+    return;
+  }
+
+  diffTimer += dt;
+  if (diffTimer > 12000) {
+    difficulty = Math.min(difficulty + 1, 8);
+    diffTimer = 0;
+    clearInterval(spawnInterval);
+    const interval = Math.max(600, 1400 - difficulty * 80);
+    spawnInterval = setInterval(spawnNote, interval);
+  }
+
+  const now = performance.now();
+
+  // Update + draw notes
+  for (let i = notes.length - 1; i >= 0; i--) {
+    const n = notes[i];
+    const age = now - n.born;
+    const progress = age / n.lifetime;
+
+    // Animate in
+    if (n.scale < 1) n.scale = Math.min(1, n.scale + 0.08);
+
+    if (!n.hit && !n.missed && progress >= 1) {
+      // Missed!
+      n.missed = true;
+      registerMiss(n);
+    }
+
+    if (n.hit) {
+      n.scale += 0.04;
+      n.hitAlpha = (n.hitAlpha || 1) - 0.07;
+      if (n.hitAlpha <= 0) { notes.splice(i, 1); continue; }
+    }
+
+    if (n.missed) {
+      n.scale += 0.02;
+      n.hitAlpha = (n.hitAlpha || 1) - 0.055;
+      if (n.hitAlpha <= 0) { notes.splice(i, 1); continue; }
+    }
+
+    drawNote(n, progress);
+  }
+
+  // Check hits
+  if (handPos && gameActive) {
+    for (const n of notes) {
+      if (n.hit || n.missed) continue;
+      const dx = handPos.x - n.x;
+      const dy = handPos.y - n.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < HIT_RADIUS && gestureState === n.type) {
+        registerHit(n);
+      }
+    }
+  }
+
+  // Particles
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx; p.y += p.vy;
+    p.vy += 0.12;
+    p.alpha -= 0.03;
+    p.life++;
+    if (p.alpha <= 0) { particles.splice(i, 1); continue; }
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fillStyle = p.color.replace('1)', `${p.alpha})`);
+    ctx.fill();
+  }
+
+  // Feedback text
+  for (let i = feedbacks.length - 1; i >= 0; i--) {
+    const f = feedbacks[i];
+    f.y += f.vy;
+    f.life++;
+    const alpha = Math.max(0, 1 - f.life / 40);
+    if (alpha <= 0) { feedbacks.splice(i, 1); continue; }
+    ctx.font = 'bold 20px Segoe UI';
+    ctx.fillStyle = f.color.replace('1)', `${alpha})`);
+    ctx.textAlign = 'center';
+    ctx.fillText(f.text, f.x, f.y);
+  }
+
+  // Draw cursor on hand pos
+  if (handPos) {
+    const col = gestureState === 'fist' ? 'rgba(255,0,85,' :
+                gestureState === 'open' ? 'rgba(0,170,255,' : 'rgba(255,255,255,';
+    ctx.beginPath();
+    ctx.arc(handPos.x, handPos.y, 22, 0, Math.PI * 2);
+    ctx.strokeStyle = col + '0.8)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(handPos.x, handPos.y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = col + '0.9)';
+    ctx.fill();
+  }
+
+  requestAnimationFrame(gameLoop);
+}
+
+function drawNote(n, progress) {
+  const r = NOTE_RADIUS * n.scale;
+  const alpha = n.hitAlpha !== undefined ? n.hitAlpha : 1;
+
+  const isRed = n.type === 'fist';
+  const mainColor = isRed ? `rgba(255,0,85,${alpha})` : `rgba(0,170,255,${alpha})`;
+  const glowColor = isRed ? `rgba(255,0,85,${alpha * 0.3})` : `rgba(0,170,255,${alpha * 0.3})`;
+  const ringFade = isRed ? `rgba(255,0,85,${(1 - progress) * alpha * 0.5})` : `rgba(0,170,255,${(1 - progress) * alpha * 0.5})`;
+
+  // Outer approach ring
+  if (!n.hit && !n.missed) {
+    const ringR = NOTE_RADIUS * 2.2 * (1 - progress) + NOTE_RADIUS;
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, ringR, 0, Math.PI * 2);
+    ctx.strokeStyle = ringFade;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  // Glow
+  ctx.beginPath();
+  ctx.arc(n.x, n.y, r + 8, 0, Math.PI * 2);
+  ctx.fillStyle = glowColor;
+  ctx.fill();
+
+  // Main circle
+  ctx.beginPath();
+  ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+  ctx.fillStyle = mainColor.replace('rgba', 'rgba').replace(/[\d.]+\)$/, `${alpha * 0.2})`);
+  ctx.fill();
+  ctx.strokeStyle = mainColor;
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // Icon
+  ctx.font = `${Math.round(r * 0.75)}px serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = '#fff';
+  ctx.fillText(n.type === 'fist' ? '✊' : '🖐', n.x, n.y);
+  ctx.globalAlpha = 1;
+  ctx.textBaseline = 'alphabetic';
+}
+
+function registerHit(n) {
+  n.hit = true;
+  n.hitAlpha = 1;
+  hits++;
+  combo++;
+  if (combo > maxCombo) maxCombo = combo;
+  const points = 300 + combo * 10;
+  score += points;
+
+  const col = n.type === 'fist' ? 'rgba(255,0,85,' : 'rgba(0,170,255,';
+  spawnParticles(n.x, n.y, col);
+  const label = combo > 5 ? (combo > 15 ? '💥 INSANE!' : '🔥 HOT!') : 'HIT';
+  spawnFeedback(n.x, n.y - 30, label, col + '1)');
+  updateScoreUI();
+}
+
+function registerMiss(n) {
+  misses++;
+  combo = 0;
+  hp = Math.max(0, hp - 12);
+  spawnFeedback(n.x, n.y - 20, 'MISS', 'rgba(255,255,255,');
+  updateScoreUI();
+  if (hp <= 0) endGame();
+}
+
+function updateScoreUI() {
+  document.getElementById('score-val').textContent = score.toLocaleString();
+  document.getElementById('combo-val').textContent = combo;
+  const acc = totalNotes > 0 ? Math.round((hits / totalNotes) * 100) : 100;
+  document.getElementById('acc-val').textContent = acc + '%';
+  document.getElementById('acc-fill').style.width = acc + '%';
+  document.getElementById('hp-fill').style.width = hp + '%';
+}
+
+// ── Game start / end ─────────────────────────────────────
+function startGame() {
+  score = 0; combo = 0; maxCombo = 0; hits = 0; misses = 0; totalNotes = 0;
+  hp = 100; difficulty = 1; diffTimer = 0;
+  notes = []; particles = []; feedbacks = [];
+  gameActive = true;
+  updateScoreUI();
+
+  clearInterval(spawnInterval);
+  spawnInterval = setInterval(spawnNote, 1200);
+  spawnNote(); // immediate first note
+
+  document.getElementById('game-over').style.display = 'none';
+  requestAnimationFrame(gameLoop);
+}
+
+function endGame() {
+  gameActive = false;
+  clearInterval(spawnInterval);
+
+  const acc = totalNotes > 0 ? Math.round((hits / totalNotes) * 100) : 0;
+  document.getElementById('final-score').textContent = score.toLocaleString();
+  document.getElementById('final-hits').textContent = hits;
+  document.getElementById('final-misses').textContent = misses;
+  document.getElementById('final-acc').textContent = acc + '%';
+  document.getElementById('final-combo').textContent = maxCombo;
+
+  const go = document.getElementById('game-over');
+  go.style.display = 'flex';
+}
+
+// ── Camera setup ─────────────────────────────────────────
+async function initCamera() {
+  document.getElementById('status-msg').textContent = 'Requesting camera…';
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720, facingMode: 'user' } });
+    const video = document.getElementById('webcam');
+    video.srcObject = stream;
+    await video.play();
+
+    const camera = new Camera(video, {
+      onFrame: async () => { await hands.send({ image: video }); },
+      width: 1280, height: 720
+    });
+    camera.start();
+
+    document.getElementById('loading-msg').style.display = 'none';
+    document.getElementById('status-msg').textContent = 'Camera ready!';
+    document.getElementById('start-btn').textContent = 'Start Game';
+    document.getElementById('start-btn').disabled = false;
+  } catch (e) {
+    document.getElementById('status-msg').textContent = 'Camera error: ' + e.message;
+  }
+}
+
+// ── Button wiring ────────────────────────────────────────
+document.getElementById('start-btn').addEventListener('click', async () => {
+  const screen = document.getElementById('start-screen');
+  if (!document.getElementById('webcam').srcObject) {
+    document.getElementById('start-btn').disabled = true;
+    document.getElementById('start-btn').textContent = 'Loading…';
+    await initCamera();
+    // wait a tick for mediapipe to settle
+    setTimeout(() => {
+      screen.style.display = 'none';
+      startGame();
+    }, 800);
+  } else {
+    screen.style.display = 'none';
+    startGame();
+  }
+});
+
+document.getElementById('retry-btn').addEventListener('click', () => {
+  startGame();
+});
+
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
