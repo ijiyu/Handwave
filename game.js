@@ -1,12 +1,35 @@
 import * as THREE from 'three';
-import { detectHands, handState, latestResults, videoSize } from './hand-track.js';
-import { getLevel } from './file.js';
+import { detectHands, loadCamera, handState } from './hand-track.js';
 
-const audio = document.getElementById("coolio");
-const notes = [];
+export const sharedState = {
+    handTrackingActive: false,
+    activeMenu: "home-screen",
+    threejsLoaded: false
+};
 
-const SPAWN_INTERVAL = 2.0;
-let lastSpawnTime = 0;
+let frames = 0;
+let cameraZoom = 5;
+let previousHandPos = null;
+
+let homeScreenAnimation;
+let homeScreenAnimationTicks = 0;
+let currentScene;
+let currentSceneName = "home-scene";
+let rightColor = 0xFF0000;
+let leftColor = 0x0000FF;
+const activeBalls = [];
+const container = document.getElementById("container");
+const cameraViewElem = document.getElementById("camera-view");
+const gameScreen = document.getElementById("game-screen");
+const homeScreen = document.getElementById("home-screen");
+const scoreHeader = document.getElementById("score");
+let score = 0;
+
+const blackOverlay = document.getElementById("blackOverlay");
+
+
+const audio = document.getElementById("song");
+
 const GESTURES = {
     Closed_Fist: { color: 0x00ffff, name: "Fist" },
     Open_Palm: { color: 0x0000ff, name: "Open Palm" },
@@ -16,215 +39,315 @@ const GESTURES = {
     Victory: { color: 0xfff200, name: "Victory" },
     ILoveYou: { color: 0xff00dd, name: "I Love You" },
 };
-const handPoints = [];
-const handLines = [];
-const HAND_CONNECTIONS = [
-    [0,1],[1,2],[2,3],[3,4],
-    [0,5],[5,6],[6,7],[7,8],
-    [5,9],[9,10],[10,11],[11,12],
-    [9,13],[13,14],[14,15],[15,16],
-    [13,17],[17,18],[18,19],[19,20],
-    [0,17]
-];
-const HIT_WINDOW = 0.5;
-const cameraViewElem = document.getElementById("camera-view");
-const scene = new THREE.Scene();
-const cameraZoom = 5;
-const aspect = window.innerWidth / window.innerHeight;
-const camera = new THREE.OrthographicCamera(-cameraZoom * aspect, cameraZoom * aspect, cameraZoom, -cameraZoom, 0.1, 10);
-camera.position.z = 5;
 
-const levelLines = getLevel();
+function checkSlices() {
+    if (!handState.position) return;
 
-const renderer = new THREE.WebGLRenderer();
-renderer.domElement.id = "threejs";
-document.getElementById("game-screen").appendChild(renderer.domElement);
+    const handPos = handState.position;
 
-const ambient = new THREE.AmbientLight(0xffffff, 0.5);
-scene.add(ambient);
+    if (!previousHandPos) {
+        previousHandPos = {
+            x: handPos.x,
+            y: handPos.y
+        };
+        return;
+    }
 
-scene.background = new THREE.Color(0xFFFFFF);
-const gridHelper = new THREE.GridHelper(20, 6, 0xffc847, 0xffc847);
-gridHelper.rotation.set(1.57, 0, 0);
-scene.add(gridHelper);
+    const dx = handPos.x - previousHandPos.x;
+    const dy = handPos.y - previousHandPos.y;
 
-let noteIndex = 0;
+    const speed = Math.sqrt(dx * dx + dy * dy);
 
-const outputCanvas = document.createElement("canvas");
-outputCanvas.id = "hand-overlay";
+    if (speed > 0.2) { // adjust threshold
+        for (const fruit of activeBalls) {
+            if (fruit.sliced) continue;
 
-outputCanvas.style.position = "absolute";
-outputCanvas.style.top = "0";
-outputCanvas.style.left = "0";
-outputCanvas.style.zIndex = "10";
-outputCanvas.style.pointerEvents = "none";
-renderer.setSize(window.innerWidth, window.innerHeight, false);
+            const fx = fruit.object.position.x;
+            const fy = fruit.object.position.y;
 
+            const dist = distanceToLineSegment(
+                previousHandPos.x,
+                previousHandPos.y,
+                handPos.x,
+                handPos.y,
+                fx,
+                fy
+            );
 
-document.getElementById("game-screen").appendChild(outputCanvas);
-
-const ctx = outputCanvas.getContext("2d");
-
-
-function spawnNote(time) {
-    const requiredGesture = levelLines[noteIndex].gesture;
-    const x = levelLines[noteIndex].x;
-    const y = levelLines[noteIndex].y;
-    const geo = new THREE.CircleGeometry(0.4, 32);
-    const mat = new THREE.MeshStandardMaterial({
-        color: GESTURES[requiredGesture].color,
-        transparent: true,
-        opacity: 0.85
-    });
-
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(x, y, 0);
-    scene.add(mesh);
-    const ring = new THREE.Mesh(
-        new THREE.RingGeometry(0.95, 1.05, 64),
-        new THREE.MeshBasicMaterial({
-            color: GESTURES[requiredGesture].color,
-            transparent: true,
-            opacity: 0.5,
-            side: THREE.DoubleSide
-        })
-    );
-    ring.position.set(x, y, 0);
-    scene.add(ring);
-    notes.push({time, mesh, ring, hit: false, requiredGesture});
-    noteIndex++;
-}
-
-function handleInput() {
-    const current = handState.gesture;
-    const t = audio.currentTime;
-
-    for (const note of notes) {
-        if (note.hit) continue;
-        const dt = Math.abs(note.time - t);
-        if (dt < HIT_WINDOW && current === note.requiredGesture) {
-            note.hit = true;
-            note.mesh.material.color.set(0x00ff00);
-
-            setTimeout(() => {
-                scene.remove(note.mesh);
-                scene.remove(note.ring);
-            }, 120);
+            if (dist < 1) {
+                sliceFruit(fruit);
+            }
         }
     }
-}
 
-function updateSpawning() {
-    const t = audio.currentTime;
-    if (t - lastSpawnTime >= SPAWN_INTERVAL) {
-        spawnNote(t + 1.2);
-        lastSpawnTime = t;
-    }
-}
-
-function updateNotes() {
-    const t = audio.currentTime;
-    for (const note of notes) {
-        if (note.hit) continue;
-        const timeToHit = note.time - t;
-        if (timeToHit < -HIT_WINDOW) {
-            scene.remove(note.mesh);
-            scene.remove(note.ring);
-            note.hit = true;
-            continue;
-        }
-
-        note.mesh.position.z = timeToHit * 2;
-        const pulse = Math.max(0, 1 - Math.abs(timeToHit));
-        note.mesh.scale.setScalar(1 + pulse);
-    }
-}
-
-function resizeHandCanvas() {
-    const threeCanvas = document.getElementById("threejs");
-    const rect = threeCanvas.getBoundingClientRect();
-
-    outputCanvas.style.width = rect.width + "px";
-    outputCanvas.style.height = rect.height + "px";
-
-    outputCanvas.width = rect.width;
-    outputCanvas.height = rect.height;
-
-    outputCanvas.style.left = "50%";
-    outputCanvas.style.top = "50%";
-    outputCanvas.style.transform = "translate(-50%, -50%)";
-}
-
-function transformPoint(point) {
-    return {
-        x: (1 - point.x) * outputCanvas.width,
-        y: point.y * outputCanvas.height
+    previousHandPos = {
+        x: handPos.x,
+        y: handPos.y
     };
 }
 
-function drawHands(results) {
-    ctx.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
+function distanceToLineSegment(x1, y1, x2, y2, px, py) {
+    const A = px - x1;
+    const B = py - y1;
+    const C = x2 - x1;
+    const D = y2 - y1;
 
-    const videoWidth = cameraViewElem.videoWidth;
-    const videoHeight = cameraViewElem.videoHeight;
+    const dot = A * C + B * D;
+    const lenSq = C * C + D * D;
 
+    let param = -1;
 
-    if (!results.landmarks) return;
-
-    ctx.lineWidth = 3;
-
-    for (const landmarks of results.landmarks) {
-
-        // draw bones
-        for (const [a, b] of HAND_CONNECTIONS) {
-            const p1 = transformPoint(landmarks[a]);
-            const p2 = transformPoint(landmarks[b]);
-
-            ctx.strokeStyle = "cyan";
-            ctx.beginPath();
-            ctx.moveTo(p1.x, p1.y);
-            ctx.lineTo(p2.x, p2.y);
-            ctx.stroke();
-        }
-
-        // draw joints
-        for (const p of landmarks) {
-            const pt = transformPoint(p, videoWidth, videoHeight);
-
-            ctx.beginPath();
-            ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
-            ctx.fillStyle = "cyan";
-            ctx.fill();
-        }
-    }
-}
-
-function animate() {
-    detectHands();
-
-    if (latestResults) {
-        drawHands(latestResults);
+    if (lenSq !== 0) {
+        param = dot / lenSq;
     }
 
-    updateSpawning();
-    updateNotes();
-    handleInput();
+    let xx, yy;
 
-    renderer.render(scene, camera);
+    if (param < 0) {
+        xx = x1;
+        yy = y1;
+    } else if (param > 1) {
+        xx = x2;
+        yy = y2;
+    } else {
+        xx = x1 + param * C;
+        yy = y1 + param * D;
+    }
+
+    const dx = px - xx;
+    const dy = py - yy;
+
+    return Math.sqrt(dx * dx + dy * dy);
 }
-renderer.setAnimationLoop(animate);
 
-window.addEventListener('resize', () => {
-    const aspect = window.innerWidth / window.innerHeight;
-    camera.left = -cameraZoom * aspect;
-    camera.right = cameraZoom * aspect;
-    camera.top = cameraZoom;
-    camera.bottom = -cameraZoom;
-    camera.updateProjectionMatrix();
-    renderer.setSize(1920, 1080, false);
+function sliceFruit(fruit) {
+    fruit.sliced = true;
+
+    gameScene.remove(fruit.object);
+
+    score++;
+    scoreHeader.innerText = score;
+}
+
+function setMenu(toMenu) {
+    /*if(toMenu == "home-screen") {
+        homeScreenAnimation = setInterval(function(){
+            homeScreen.style.backgroundImage = "linear-gradient("+(homeScreenAnimationTicks*2)+"deg, rgb(5, 1, 137), rgb(219, 0, 219))";
+            homeScreenAnimationTicks++;
+        },33);
+    }else {
+        if(homeScreenAnimation)clearInterval(homeScreenAnimation);
+    }*/
+    switch(toMenu) {
+        case "home-screen":
+            currentScene = homeScene;
+            currentSceneName = "home-scene";
+            break;
+        case "game-screen":
+            currentScene = gameScene;
+            currentSceneName = "game-scene";
+            break;
+    }
+    const menuScreens = document.getElementsByClassName("screen");
+    for (const menu of menuScreens) {
+        menu.style.display = (menu.id !== toMenu) ? "none" : "block";
+    }
+    sharedState["activeMenu"] = toMenu;
+}
+
+
+let overlayReturn;
+document.getElementById("start-button").onclick = () => {
+    setMenu('game-screen'); loadCamera();
+    blackOverlay.style.backgroundColor = "rgba(0, 0, 0, 1)";
+    overlayReturn = setInterval(function(){
+        if(sharedState["handTrackingActive"]) {
+            blackOverlay.style.backgroundColor = "rgba(0, 0, 0, 0)";
+            clearInterval(overlayReturn);
+            audio.play();
+            scoreHeader.style.visibility = "visible";
+            setInterval(function(){
+                addBall();
+            },3000);
+        }
+    }, 10);
+};
+
+const gameScene = new THREE.Scene();
+let aspect = window.innerWidth / window.innerHeight;
+const camera = new THREE.OrthographicCamera(-cameraZoom * aspect, cameraZoom * aspect, cameraZoom, -cameraZoom, 0.1, 10);
+camera.position.z = 5;
+
+const renderer = new THREE.WebGLRenderer();
+renderer.domElement.id = "threejs";
+
+renderer.domElement.style.zIndex = "-1";
+
+//renderer.shadowMap.enabled = true;
+container.appendChild(renderer.domElement);
+
+sharedState["threejsLoaded"] = true;
+
+const ambient = new THREE.AmbientLight(0xffffff, 0.25);
+gameScene.add(ambient);
+
+const spotlight = new THREE.DirectionalLight(0xffffff,1.1);
+spotlight.position.set(0,4,1.5);
+spotlight.target.position.set(0,-2,1);
+spotlight.decay = 2;
+spotlight.castShadow = true;
+
+gameScene.add(spotlight);
+gameScene.add(spotlight.target);
+
+const gridHelper = new THREE.GridHelper(20,6,0xffc847,0xffc847);
+gridHelper.rotation.set(1.57,0,0);
+gameScene.add(gridHelper);
+setBackgroundThree(0xFFFFFF,gameScene);
+
+//balltest
+const ballGeometry = new THREE.CircleGeometry();
+
+
+//home scene
+
+const homeScene = new THREE.Scene();
+
+const gridHelper2 = new THREE.GridHelper(20,6,0xffc847,0xffc847);
+gridHelper2.rotation.set(1.57,0,0);
+homeScene.add(gridHelper2);
+setMenu("home-screen");
+
+const points = [];
+
+for (let x = -10; x <= 10; x += 0.05) {
+    const y = Math.sin(x);
+    points.push(new THREE.Vector3(x, y, 0));
+}
+
+const geometry = new THREE.BufferGeometry().setFromPoints(points);
+
+const material = new THREE.LineBasicMaterial({
+    color: 0x00ff00
 });
 
-resizeHandCanvas();
+const sineWave = new THREE.Line(geometry, material);
+homeScene.add(sineWave);
 
-renderer.setSize(1920, 1080, false);
-audio.play();
+const positions = geometry.attributes.position.array;
+//animation loop
+function animate(time) {
+    if(currentSceneName == "home-scene") {
+        let index = 0;
+
+        for (let x = -10; x <= 10; x += 0.05) {
+            positions[index + 1] = Math.sin(x + time * 0.002);
+            index += 3;
+        }
+
+        geometry.attributes.position.needsUpdate = true;
+    }
+    if(currentSceneName == "game-scene") {
+        for (const fruit of activeBalls) {
+            fruit.object.position.x += fruit.vx;
+            fruit.object.position.y += fruit.vy;
+
+            fruit.vy -= 0.005;
+        }
+        checkSlices();
+
+        if (sharedState["handTrackingActive"]) {
+            detectHands();
+        }
+    }
+    //gridHelper.translateZ(0.02*Math.sin(frames/60));
+    //gridHelper.translateX(0.03*Math.sin(frames/60));
+    //activeBalls[0]["object"].translateY(0.03*Math.sin(frames/60));
+    renderer.render(currentScene, camera);
+    frames++;
+}
+
+renderer.setAnimationLoop(animate);
+
+
+
+//three js functions
+function updateObjectScale(obj) {
+    const baseScale = 0.35;
+    const depthScale = (1 + obj.position.z * 0.5); 
+    obj.scale.setScalar(baseScale * depthScale);
+}
+
+function setBackgroundThree(color, scene=currentScene) { //set background color; color should be formatted as a hexadecimal literal, e.g. 0xCAFFEE
+    scene.background = new THREE.Color(color);
+}
+
+export function addBall(posx=Math.random()*12-6, posy=-5, baseScale = 0.5, hand=0, color = -1) {
+    console.log(hand);
+    const objColor = color==-1?(hand==0?0xff00ff:hand==1?rightColor:leftColor):color;
+    const ball = new THREE.Mesh(ballGeometry, new THREE.MeshStandardMaterial({color:objColor, transparent:true,opacity:0.4}));
+    ball.position.set(posx, posy, 0);
+    ball.scale.set(1,1,1);
+    gameScene.add(ball);
+    activeBalls.push({posx:posx,posy:posy,baseScale:baseScale,color:color,object:ball, vx: (Math.random() - 0.5) * 0.1,
+    vy: 0.25 + Math.random() * 0.05,
+    sliced: false});
+}
+
+function resizeCanvas() {
+    // internal resolution stays fixed
+    renderer.setSize(1920, 1080, false);
+
+    const windowW = window.innerWidth;
+    const windowH = window.innerHeight;
+
+    const targetAspect = 16 / 9;
+    const windowAspect = windowW / windowH;
+
+    let displayW, displayH;
+
+    if (windowAspect > targetAspect) {
+        // window is wider → height limits
+        displayH = windowH;
+        displayW = displayH * targetAspect;
+    } else {
+        // window is taller → width limits
+        displayW = windowW;
+        displayH = displayW / targetAspect;
+    }
+
+    renderer.domElement.style.width = displayW + "px";
+    renderer.domElement.style.height = displayH + "px";
+
+    renderer.domElement.style.position = "absolute";
+    renderer.domElement.style.left = "50%";
+    renderer.domElement.style.transform = "translateX(-50%)";
+}
+function updateCamera() {
+    const aspect = 1920 / 1080; // FIXED aspect ratio
+
+    camera.left   = -cameraZoom * aspect;
+    camera.right  =  cameraZoom * aspect;
+    camera.top    =  cameraZoom;
+    camera.bottom = -cameraZoom;
+
+    camera.updateProjectionMatrix();
+}
+updateCamera();
+// three js events
+window.addEventListener('resize', () => { // add threejs canvas size update event
+    resizeCanvas();
+    const aspect = window.innerWidth / window.innerHeight;
+
+    camera.left   = -cameraZoom * aspect;
+    camera.right  =  cameraZoom * aspect;
+    camera.top    =  cameraZoom;
+    camera.bottom = -cameraZoom;
+
+    camera.updateProjectionMatrix();
+    updateCamera();
+});
+
+resizeCanvas();
+
+setBackgroundThree(0xFFFFFF);

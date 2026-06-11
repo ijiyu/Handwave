@@ -1,0 +1,7 @@
+Closed_Fist 100 800
+Open_Palm 400 400
+Pointing_Up 300 800
+Thumb_Down 200 100
+Thumb_Up 900 500
+Victory 1000 1000
+ILoveYo 500 200
