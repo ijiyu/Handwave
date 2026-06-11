@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HandBeat</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#111; color:#fff; font-family:'Segoe UI',sans-serif; overflow:hidden; height:100vh; width:100vw; cursor:none; }
+
+  #webcam    { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; opacity:0.14; transform:scaleX(-1); }
+  #lmCanvas  { position:absolute; top:0; left:0; width:100%; height:100%; z-index:9;  pointer-events:none; }
+  #gameCanvas{ position:absolute; top:0; left:0; width:100%; height:100%; z-index:10; pointer-events:none; }
+  #ui { position:absolute; top:0; left:0; width:100%; height:100%; z-index:20; pointer-events:none; }
+
+  #score-display { position:absolute; top:24px; right:32px; text-align:right; }
+  #score-display .lbl { font-size:11px; letter-spacing:3px; color:rgba(255,255,255,.35); text-transform:uppercase; }
+  #score-display .num { font-size:52px; font-weight:700; letter-spacing:-2px; line-height:1; }
+
+  #combo-display { position:absolute; top:24px; left:32px; font-size:13px; color:rgba(255,255,255,.4); letter-spacing:2px; text-transform:uppercase; }
+  #combo-display .cnum { font-size:40px; font-weight:700; color:#fff; display:block; line-height:1; }
+
+  /* Timer — centred top */
+  #timer-display {
+    position:absolute; top:20px; left:50%; transform:translateX(-50%);
+    text-align:center; pointer-events:none;
+  }
+  #timer-display .lbl { font-size:10px; letter-spacing:3px; color:rgba(255,255,255,.3); text-transform:uppercase; }
+  #timer-display .tval { font-size:38px; font-weight:700; letter-spacing:-1px; line-height:1; transition:color .3s; }
+  #timer-display .tval.urgent { color:#f05; }
+
+  #acc-wrap { position:absolute; bottom:28px; left:50%; transform:translateX(-50%); width:260px; text-align:center; }
+  #acc-wrap .lbl { font-size:10px; letter-spacing:3px; color:rgba(255,255,255,.3); text-transform:uppercase; }
+  #acc-wrap .val { font-size:18px; font-weight:600; margin:2px 0 4px; }
+  .bar-track { height:3px; background:rgba(255,255,255,.08); border-radius:2px; overflow:hidden; }
+  .bar-fill  { height:100%; background:#f80; border-radius:2px; transition:width .3s; width:100%; }
+
+  #hp-bar  { position:absolute; top:0; left:0; width:100%; height:5px; background:rgba(255,255,255,.05); z-index:21; }
+  #hp-fill { height:100%; background:linear-gradient(90deg,#f05,#f80); transition:width .4s; width:100%; }
+
+  #gest-badge {
+    position:absolute; bottom:80px; left:50%; transform:translateX(-50%);
+    font-size:13px; letter-spacing:2px; text-transform:uppercase;
+    color:rgba(255,255,255,.35); padding:6px 18px;
+    border:1px solid rgba(255,255,255,.1); border-radius:20px;
+    background:rgba(255,255,255,.04); transition:all .15s;
+    pointer-events:none;
+  }
+  #gest-badge.fist  { color:#f05; border-color:rgba(255,0,85,.5);   background:rgba(255,0,85,.1); }
+  #gest-badge.thumb { color:#0f9; border-color:rgba(0,255,150,.5);  background:rgba(0,255,150,.08); }
+
+  /* screens */
+  .screen { position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(10,10,15,.93); z-index:50; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px; }
+  .screen h1 { font-size:72px; font-weight:800; letter-spacing:-4px; color:#fff; }
+  .screen h2 { font-size:48px; font-weight:800; letter-spacing:-2px; }
+  .big-btn   { padding:14px 48px; background:#222; border:1px solid rgba(255,255,255,.15); border-radius:12px; color:#fff; font-size:16px; font-weight:600; letter-spacing:1px; cursor:pointer; pointer-events:all; transition:transform .15s,opacity .15s; }
+  .big-btn:hover { transform:scale(1.04); opacity:.92; }
+  .ghost-btn { padding:12px 40px; background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.15); border-radius:40px; color:#fff; font-size:15px; cursor:pointer; pointer-events:all; transition:background .2s; }
+  .ghost-btn:hover { background:rgba(255,255,255,.13); }
+  #status-msg { font-size:13px; color:rgba(255,255,255,.28); letter-spacing:1px; }
+  .final-score { font-size:80px; font-weight:700; letter-spacing:-4px; color:#f80; }
+  .stats { display:flex; gap:32px; color:rgba(255,255,255,.45); font-size:13px; letter-spacing:1px; flex-wrap:wrap; justify-content:center; }
+  .stats span b { color:#fff; display:block; font-size:22px; font-weight:600; }
+  #loading-msg { position:absolute; bottom:130px; left:50%; transform:translateX(-50%); font-size:11px; color:rgba(255,255,255,.2); letter-spacing:2px; z-index:60; }
+</style>
+</head>
+<body>
+
+<video id="webcam" autoplay muted playsinline></video>
+<canvas id="lmCanvas"></canvas>
+<canvas id="gameCanvas"></canvas>
+
+<div id="hp-bar"><div id="hp-fill"></div></div>
+
+<div id="ui">
+  <div id="score-display">
+    <div class="lbl">Score</div>
+    <div class="num" id="score-val">0</div>
+  </div>
+  <div id="combo-display">
+    <span class="cnum" id="combo-val">0</span>combo
+  </div>
+  <div id="timer-display">
+    <div class="lbl">Time</div>
+    <div class="tval" id="timer-val">2:00</div>
+  </div>
+  <div id="acc-wrap">
+    <div class="lbl">Accuracy</div>
+    <div class="val" id="acc-val">100%</div>
+    <div class="bar-track"><div class="bar-fill" id="acc-fill"></div></div>
+  </div>
+  <div id="gest-badge">open hand</div>
+</div>
+
+<div class="screen" id="start-screen">
+  <h1>HandBeat</h1>
+  <button class="big-btn" id="start-btn">Start</button>
+  <div id="status-msg">Camera access required</div>
+</div>
+
+<div class="screen" id="game-over" style="display:none">
+  <h2 id="over-title">Time's Up!</h2>
+  <div class="final-score" id="final-score">0</div>
+  <div class="stats">
+    <span><b id="final-hits">0</b>hits</span>
+    <span><b id="final-misses">0</b>misses</span>
+    <span><b id="final-acc">0%</b>accuracy</span>
+    <span><b id="final-combo">0</b>best combo</span>
+  </div>
+  <button class="ghost-btn" id="retry-btn">Play Again</button>
+</div>
+
+<div id="loading-msg">Loading MediaPipe…</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script>
+// ─── Canvas resize ────────────────────────────────────────────────────────────
+const gc  = document.getElementById('gameCanvas');
+const gx  = gc.getContext('2d');
+const lmc = document.getElementById('lmCanvas');
+const lx  = lmc.getContext('2d');
+
+function resize() { gc.width = lmc.width = window.innerWidth; gc.height = lmc.height = window.innerHeight; }
+resize();
+window.addEventListener('resize', resize);
+
+// ─── Hand state ───────────────────────────────────────────────────────────────
+let cx = -999, cy = -999, rawCx = -999, rawCy = -999;
+const SMOOTH = 0.18;
+
+// Gestures: 'none' | 'fist' | 'thumb'
+let gesture = 'none';
+let prevGesture = 'none';
+let fistEdge  = false;   // rising edge for fist
+let thumbEdge = false;   // rising edge for thumbs-up
+let handVisible = false;
+
+// ─── Gesture detection ────────────────────────────────────────────────────────
+function detectGesture(lms) {
+  // ── Finger curl check ──
+  const fingers = [
+    [8,  6,  5],  // index
+    [12, 10, 9],  // middle
+    [16, 14, 13], // ring
+    [20, 18, 17]  // pinky
+  ];
+  let curled = 0;
+  const extended = [];
+  for (let f = 0; f < fingers.length; f++) {
+    const [tip, pip] = fingers[f];
+    if (lms[tip].y > lms[pip].y) { curled++; extended.push(false); }
+    else extended.push(true);
+  }
+
+  // Fist: all 4 fingers curled
+  if (curled >= 3) return 'fist';
+
+  // ILY gesture: thumb + index + pinky extended, middle + ring curled
+  const ilyGesture =
+    extended[0] &&     // index
+    !extended[1] &&    // middle curled
+    !extended[2] &&    // ring curled
+    extended[3];       // pinky
+
+  if (ilyGesture) return 'thumb';
+
+  return 'none';
+}
+
+// ─── MediaPipe ────────────────────────────────────────────────────────────────
+const handsModel = new Hands({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
+handsModel.setOptions({ maxNumHands:1, modelComplexity:1, minDetectionConfidence:0.65, minTrackingConfidence:0.6 });
+handsModel.onResults(onResults);
+
+function onResults(results) {
+  lx.clearRect(0, 0, lmc.width, lmc.height);
+
+  if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+    handVisible = false; gesture = 'none'; fistEdge = false; thumbEdge = false;
+    updateBadge(); return;
+  }
+
+  handVisible = true;
+  const lms = results.multiHandLandmarks[0];
+
+  // ── Palm center cursor ──
+  const palmPts = [0, 5, 9, 13, 17];
+  const palmAvg = palmPts.reduce((acc, idx) => { acc.x += lms[idx].x; acc.y += lms[idx].y; return acc; }, {x:0,y:0});
+  rawCx = (1 - palmAvg.x / palmPts.length) * lmc.width;
+  rawCy = (palmAvg.y / palmPts.length) * lmc.height;
+
+  if (cx < 0) { cx = rawCx; cy = rawCy; }
+  cx += (rawCx - cx) * (1 - SMOOTH);
+  cy += (rawCy - cy) * (1 - SMOOTH);
+
+  // ── Gesture detection ──
+  prevGesture = gesture;
+  gesture = detectGesture(lms);
+  fistEdge  = (prevGesture !== 'fist'  && gesture === 'fist');
+  thumbEdge = (prevGesture !== 'thumb' && gesture === 'thumb');
+
+  updateBadge();
+  drawSkeleton(lms, lmc.width, lmc.height);
+}
+
+function updateBadge() {
+  const b = document.getElementById('gest-badge');
+  if (!handVisible)        { b.textContent = 'no hand';           b.className = ''; }
+  else if (gesture==='fist')  { b.textContent = '✊ fist';        b.className = 'fist'; }
+  else if (gesture==='thumb') { b.textContent = '🤟 ILY';   b.className = 'thumb'; }
+  else                        { b.textContent = '🖐 open — move'; b.className = ''; }
+}
+
+function drawSkeleton(lms, W, H) {
+  const CONN = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
+                [9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+  const px = i => (1 - lms[i].x) * W;
+  const py = i => lms[i].y * H;
+
+  const lineCol = gesture==='fist' ? 'rgba(255,0,85,0.6)' : gesture==='thumb' ? 'rgba(0,255,150,0.6)' : 'rgba(255,255,255,0.28)';
+  const dotCol  = gesture==='fist' ? 'rgba(255,0,85,0.9)' : gesture==='thumb' ? 'rgba(0,255,150,0.9)' : 'rgba(255,255,255,0.5)';
+
+  lx.strokeStyle = lineCol; lx.lineWidth = 2;
+  for (const [a,b] of CONN) { lx.beginPath(); lx.moveTo(px(a),py(a)); lx.lineTo(px(b),py(b)); lx.stroke(); }
+  for (let i=0;i<lms.length;i++) {
+    lx.beginPath(); lx.arc(px(i),py(i),i===0?5:3,0,Math.PI*2);
+    lx.fillStyle=dotCol; lx.fill();
+  }
+  // Highlight thumb tip and index tip
+  lx.beginPath(); lx.arc(px(4),py(4),7,0,Math.PI*2); lx.strokeStyle='#ffe066'; lx.lineWidth=2; lx.stroke();
+  lx.beginPath(); lx.arc(px(8),py(8),7,0,Math.PI*2); lx.strokeStyle=gesture==='fist'?'#ff0055':'#00aaff'; lx.lineWidth=2.5; lx.stroke();
+}
+
+// ─── Game state ───────────────────────────────────────────────────────────────
+let score=0, combo=0, maxCombo=0, hits=0, misses=0, totalNotes=0;
+let hp=100, gameActive=false, difficulty=1, diffTimer=0;
+let notes=[], particles=[], feedbacks=[];
+let noteId=0, spawnInterval=null;
+let gameStartTime=0;
+const GAME_DURATION = 120000; // 2 minutes in ms
+
+let rippleX=0, rippleY=0, rippleR=0, rippleA=0;
+
+// ─── Note types ───────────────────────────────────────────────────────────────
+// type 0 = fist (red), type 1 = thumb (green)
+const NOTE_TYPES = [
+  { gesture:'fist',  stroke:'#ff0055', fill:'rgba(255,0,85,',    glow:'rgba(255,0,85,',   icon:'' },
+  { gesture:'thumb', stroke:'#00ff96', fill:'rgba(0,255,150,',   glow:'rgba(0,255,150,',  icon:'' },
+];
+
+const NOTE_R    = 46;
+const HIT_R     = 60;
+const BASE_LIFE = 2000;
+
+// ─── Spawn ────────────────────────────────────────────────────────────────────
+function spawnNote() {
+  if (!gameActive) return;
+  const playW = gc.width  * 0.62;
+  const playH = gc.height * 0.62;
+  const offX  = (gc.width  - playW) / 2;
+  const offY  = (gc.height - playH) / 2;
+  const x = offX + NOTE_R + Math.random() * (playW - NOTE_R * 2);
+  const y = offY + NOTE_R + Math.random() * (playH - NOTE_R * 2);
+  const life = Math.max(900, BASE_LIFE - difficulty * 80);
+  const typeIdx = Math.floor(Math.random() * 2); // 0=fist (red), 1=thumb (green)
+  notes.push({ id:noteId++, x, y, born:performance.now(), life,
+    hit:false, missed:false, scale:0, typeIdx, hitAlpha:undefined });
+  totalNotes++;
+}
+
+// ─── Particles / feedback ─────────────────────────────────────────────────────
+function spawnParticles(x, y, fillBase) {
+  for (let i=0;i<18;i++) {
+    const a=Math.random()*Math.PI*2, s=2+Math.random()*6;
+    particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,alpha:1,r:2.5+Math.random()*4,col:fillBase,life:0});
+  }
+}
+function spawnFeedback(x, y, text, col) { feedbacks.push({x,y,text,col,life:0,vy:-1.4}); }
+
+// ─── Game loop ────────────────────────────────────────────────────────────────
+let lastT = 0;
+function gameLoop(ts) {
+  const dt = ts - lastT; lastT = ts;
+  gx.clearRect(0, 0, gc.width, gc.height);
+
+  if (!gameActive) { requestAnimationFrame(gameLoop); return; }
+
+  // ── Timer ──────────────────────────────────────────────
+  const elapsed = performance.now() - gameStartTime;
+  const remaining = Math.max(0, GAME_DURATION - elapsed);
+  const secs = Math.ceil(remaining / 1000);
+  const mm = Math.floor(secs / 60);
+  const ss = String(secs % 60).padStart(2, '0');
+  const timerEl = document.getElementById('timer-val');
+  timerEl.textContent = mm + ':' + ss;
+  timerEl.className = 'tval' + (remaining < 20000 ? ' urgent' : '');
+  if (remaining <= 0) { endGame('time'); return; }
+
+  // ── Difficulty ramp ──────────────────────────────────
+  diffTimer += dt;
+  if (diffTimer > 10000) {
+    difficulty = Math.min(difficulty + 1, 10);
+    diffTimer = 0;
+    clearInterval(spawnInterval);
+    spawnInterval = setInterval(spawnNote, Math.max(450, 1000 - difficulty * 60));
+  }
+
+  const now = performance.now();
+
+  // ── Hit detection ────────────────────────────────────
+  const tryHit = (edgeGesture) => {
+    if (!handVisible) return;
+    let gotOne = false;
+    for (const n of notes) {
+      if (n.hit || n.missed) continue;
+      if (Math.hypot(cx - n.x, cy - n.y) < HIT_R) {
+        const nt = NOTE_TYPES[n.typeIdx];
+        if (nt.gesture === edgeGesture) {
+          registerHit(n);
+        } else {
+          n.missed = true;
+          registerMiss(n, true);
+        }
+        gotOne = true;
+        rippleX = cx; rippleY = cy; rippleR = 0;
+        rippleA = n.hit ? 1 : 0.45;
+        break;
+      }
+    }
+    if (!gotOne) { rippleX=cx; rippleY=cy; rippleR=0; rippleA=0.35; }
+  };
+
+  if (fistEdge)  { fistEdge  = false; tryHit('fist'); }
+  if (thumbEdge) { thumbEdge = false; tryHit('thumb'); }
+
+  // ── Notes ────────────────────────────────────────────
+  for (let i=notes.length-1;i>=0;i--) {
+    const n=notes[i];
+    const age=now-n.born;
+    const prog=Math.min(age/n.life,1);
+    if (n.scale<1) n.scale=Math.min(1,n.scale+0.08);
+
+    if (!n.hit && !n.missed && prog>=1) { n.missed=true; registerMiss(n,false); }
+
+    if (n.hit)    { n.scale+=0.05; n.hitAlpha=(n.hitAlpha??1)-0.07; if(n.hitAlpha<=0){notes.splice(i,1);continue;} }
+    if (n.missed) { n.scale+=0.02; n.hitAlpha=(n.hitAlpha??1)-0.05; if(n.hitAlpha<=0){notes.splice(i,1);continue;} }
+
+    drawNote(n, prog);
+  }
+
+  // ── Particles ────────────────────────────────────────
+  for (let i=particles.length-1;i>=0;i--) {
+    const p=particles[i];
+    p.x+=p.vx; p.y+=p.vy; p.vy+=0.15;
+    p.alpha-=0.026; p.life++;
+    if(p.alpha<=0){particles.splice(i,1);continue;}
+    gx.beginPath(); gx.arc(p.x,p.y,p.r,0,Math.PI*2);
+    gx.fillStyle=p.col+p.alpha+')'; gx.fill();
+  }
+
+  // ── Feedback text ────────────────────────────────────
+  for (let i=feedbacks.length-1;i>=0;i--) {
+    const f=feedbacks[i];
+    f.y+=f.vy; f.life++;
+    const a=Math.max(0,1-f.life/38);
+    if(a<=0){feedbacks.splice(i,1);continue;}
+    gx.font='bold 18px Segoe UI';
+    gx.fillStyle=f.col+a+')';
+    gx.textAlign='center'; gx.fillText(f.text,f.x,f.y);
+  }
+
+  // ── Ripple ───────────────────────────────────────────
+  if (rippleA>0) {
+    rippleR+=4; rippleA-=0.045;
+    gx.beginPath(); gx.arc(rippleX,rippleY,rippleR,0,Math.PI*2);
+    gx.strokeStyle=`rgba(255,255,255,${Math.max(0,rippleA)})`;
+    gx.lineWidth=2; gx.stroke();
+  }
+
+  // ── Cursor ───────────────────────────────────────────
+  if (handVisible && cx>0) {
+    let col, r;
+    if      (gesture==='fist')  { col='rgba(255,0,85,';   r=10; }
+    else if (gesture==='thumb') { col='rgba(0,255,150,';  r=10; }
+    else                        { col='rgba(255,255,255,'; r=15; }
+
+    gx.beginPath(); gx.arc(cx,cy,r+6,0,Math.PI*2);
+    gx.strokeStyle=col+'0.35)'; gx.lineWidth=1.5; gx.stroke();
+    gx.beginPath(); gx.arc(cx,cy,r,0,Math.PI*2);
+    gx.strokeStyle=col+'0.85)'; gx.lineWidth=2.5; gx.stroke();
+    gx.beginPath(); gx.arc(cx,cy,3,0,Math.PI*2);
+    gx.fillStyle=col+'1)'; gx.fill();
+  }
+
+  requestAnimationFrame(gameLoop);
+}
+
+// ─── Note drawing ─────────────────────────────────────────────────────────────
+function drawNote(n, prog) {
+  const c = NOTE_TYPES[n.typeIdx];
+  const r = NOTE_R * n.scale;
+  const a = n.hitAlpha ?? 1;
+
+  if (!n.hit && !n.missed) {
+    const ringR = NOTE_R + NOTE_R * 1.7 * (1 - prog);
+    gx.beginPath(); gx.arc(n.x,n.y,ringR,0,Math.PI*2);
+    gx.strokeStyle=c.stroke+'55'; gx.lineWidth=1.5; gx.stroke();
+
+    const startAngle=-Math.PI/2;
+    const endAngle=startAngle+Math.PI*2*(1-prog);
+    gx.beginPath(); gx.arc(n.x,n.y,NOTE_R+5,startAngle,endAngle);
+    gx.strokeStyle=c.stroke; gx.lineWidth=3;
+    gx.lineCap='round'; gx.stroke(); gx.lineCap='butt';
+  }
+
+  // glow
+  gx.beginPath(); gx.arc(n.x,n.y,r+12,0,Math.PI*2);
+  gx.fillStyle=c.glow+(a*0.18)+')'; gx.fill();
+
+  // fill
+  gx.beginPath(); gx.arc(n.x,n.y,r,0,Math.PI*2);
+  gx.fillStyle=c.fill+(a*0.15)+')'; gx.fill();
+
+  // stroke
+  gx.beginPath(); gx.arc(n.x,n.y,r,0,Math.PI*2);
+  gx.strokeStyle=c.stroke; gx.lineWidth=2.5;
+  gx.globalAlpha=a; gx.stroke(); gx.globalAlpha=1;
+
+  if (n.missed) {
+    const s=r*0.38;
+    gx.strokeStyle=`rgba(255,255,255,${a*0.55})`; gx.lineWidth=2;
+    gx.beginPath(); gx.moveTo(n.x-s,n.y-s); gx.lineTo(n.x+s,n.y+s); gx.stroke();
+    gx.beginPath(); gx.moveTo(n.x+s,n.y-s); gx.lineTo(n.x-s,n.y+s); gx.stroke();
+  }
+}
+
+// ─── Register hit / miss ──────────────────────────────────────────────────────
+function registerHit(n) {
+  n.hit=true; n.hitAlpha=1;
+  hits++; combo++; if(combo>maxCombo) maxCombo=combo;
+  score += 300 + combo*12;
+  const c = NOTE_TYPES[n.typeIdx];
+  spawnParticles(n.x,n.y,c.fill);
+  const lbl = combo>10 ? 'PERFECT' : combo>3 ? 'GOOD' : 'HIT';
+  spawnFeedback(n.x,n.y-40,lbl,c.fill);
+  updateUI();
+}
+
+function registerMiss(n, wrongGesture=false) {
+  misses++; combo=0;
+  hp=Math.max(0,hp-14);
+  const lbl = wrongGesture ? 'WRONG!' : 'MISS';
+  spawnFeedback(n.x,n.y-24,lbl,'rgba(255,255,255,');
+  updateUI();
+  if(hp<=0) endGame('hp');
+}
+
+function updateUI() {
+  document.getElementById('score-val').textContent = score.toLocaleString();
+  document.getElementById('combo-val').textContent = combo;
+  const acc = totalNotes>0 ? Math.round(hits/totalNotes*100) : 100;
+  document.getElementById('acc-val').textContent = acc+'%';
+  document.getElementById('acc-fill').style.width = acc+'%';
+  document.getElementById('hp-fill').style.width = hp+'%';
+}
+
+// ─── Start / end ──────────────────────────────────────────────────────────────
+function startGame() {
+  score=0; combo=0; maxCombo=0; hits=0; misses=0; totalNotes=0;
+  hp=100; difficulty=1; diffTimer=0;
+  notes=[]; particles=[]; feedbacks=[];
+  gameActive=true; gameStartTime=performance.now();
+  updateUI();
+  clearInterval(spawnInterval);
+  spawnInterval = setInterval(spawnNote, 950);
+  spawnNote(); spawnNote();
+  document.getElementById('game-over').style.display='none';
+  requestAnimationFrame(gameLoop);
+}
+
+// ─── End game ─────────────────────────────────────────────────────────────────
+function endGame(reason='time') {
+  gameActive=false; clearInterval(spawnInterval);
+  const acc = totalNotes>0 ? Math.round(hits/totalNotes*100) : 0;
+  document.getElementById('over-title').textContent = reason==='time' ? "Time's Up!" : 'Game Over';
+  document.getElementById('final-score').textContent = score.toLocaleString();
+  document.getElementById('final-hits').textContent = hits;
+  document.getElementById('final-misses').textContent = misses;
+  document.getElementById('final-acc').textContent = acc+'%';
+  document.getElementById('final-combo').textContent = maxCombo;
+  document.getElementById('game-over').style.display='flex';
+}
+
+// ─── Camera ───────────────────────────────────────────────────────────────────
+async function initCamera() {
+  document.getElementById('status-msg').textContent = 'Requesting camera…';
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({video:{width:1280,height:720,facingMode:'user'}});
+    const vid = document.getElementById('webcam');
+    vid.srcObject=stream; await vid.play();
+    const cam = new Camera(vid,{
+      onFrame: async()=>{ await handsModel.send({image:vid}); },
+      width:1280, height:720
+    });
+    cam.start();
+    document.getElementById('loading-msg').style.display='none';
+    document.getElementById('status-msg').textContent='Camera ready!';
+    document.getElementById('start-btn').textContent='Start';
+    document.getElementById('start-btn').disabled=false;
+  } catch(e) {
+    document.getElementById('status-msg').textContent='Camera error: '+e.message;
+  }
+}
+
+document.getElementById('start-btn').addEventListener('click', async()=>{
+  if (!document.getElementById('webcam').srcObject) {
+    document.getElementById('start-btn').disabled=true;
+    document.getElementById('start-btn').textContent='Loading…';
+    await initCamera();
+    setTimeout(()=>{ document.getElementById('start-screen').style.display='none'; startGame(); }, 900);
+  } else {
+    document.getElementById('start-screen').style.display='none';
+    startGame();
+  }
+});
+
+document.getElementById('retry-btn').addEventListener('click',()=>startGame());
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
